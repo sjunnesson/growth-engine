@@ -31,6 +31,7 @@ export default function RootLayout({
               <Link href="/cadence">Cadence</Link>
               <Link href="/angles">Angles</Link>
               <Link href="/facts">Fact base</Link>
+              <Link href="/files">Files</Link>
               <Link href="/audit">Audit</Link>
             </>
           )}

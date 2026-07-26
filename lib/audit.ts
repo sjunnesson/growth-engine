@@ -20,6 +20,7 @@ export type AuditAction =
   | "facts_updated"
   | "cadence_updated"
   | "product_reviewed"
+  | "product_file_updated"
   | "error";
 
 /**

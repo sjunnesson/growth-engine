@@ -338,21 +338,54 @@ export default async function SetupPage({
 
         <h2>A · Review the drafts (human judgment — the whole point)</h2>
         <div className="card">
-          <div className="row">
-            <span className={`pill ${todos ? "warn" : "good"}`}>
-              {todos} TODO(verify)
-            </span>
-            <span className="pill">{angles} angles</span>
-            <span className="pill">{seo} SEO pages</span>
-            <span className="pill">{comparisons} comparisons</span>
-          </div>
-          <p className="dim" style={{ fontSize: 12, margin: "8px 0 0" }}>
-            Fix every TODO and delete anything not literally true in the{" "}
-            <Link href="/facts">fact base</Link>; curate{" "}
-            <Link href="/angles">angles</Link>; review{" "}
-            <code>product/factbase/banned-claims.json</code> and{" "}
-            <code>product/product.json</code> in your editor.
-          </p>
+          {[
+            {
+              href: "/facts",
+              pill: `${todos} TODO(verify)`,
+              warn: todos > 0,
+              label: "Fact base — fix every TODO, delete anything not literally true",
+            },
+            {
+              href: "/angles",
+              pill: `${angles} angles`,
+              warn: angles === 0,
+              label: "Evergreen angles — the briefs the social + blog drip rotates through",
+            },
+            {
+              href: "/files#banned-claims",
+              pill: "guardrails",
+              warn: false,
+              label: "Banned claims — patterns that block copy; check the pricing + competitor rules",
+            },
+            {
+              href: "/files#seo-pages",
+              pill: `${seo} SEO pages`,
+              warn: false,
+              label: "Landing-page briefs — audience + intent per page",
+            },
+            {
+              href: "/files#comparisons",
+              pill: `${comparisons} comparisons`,
+              warn: false,
+              label: "Comparison briefs — categories only, never named competitors",
+            },
+            {
+              href: "/files#product",
+              pill: "config",
+              warn: false,
+              label: "Product config — repos, domains, CTA paths, social targets",
+            },
+          ].map((t) => (
+            <div
+              key={t.href}
+              className="row"
+              style={{ padding: "6px 0", borderBottom: "1px solid var(--line)" }}
+            >
+              <span className={`pill ${t.warn ? "warn" : ""}`}>{t.pill}</span>
+              <span style={{ flex: 1 }}>{t.label}</span>
+              <Link href={t.href}>review →</Link>
+            </div>
+          ))}
         </div>
 
         <h2>B · Database</h2>

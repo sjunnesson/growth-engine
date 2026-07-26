@@ -67,6 +67,13 @@ function str(o: Record<string, unknown>, key: string, where: string): string {
   return v.trim();
 }
 
+/** Parse + shape-check a product.json payload; throws with a field-level
+ *  message on anything unusable. Exported so editors can validate BEFORE
+ *  writing (an invalid product.json would take down the whole dashboard). */
+export function validateProductConfig(raw: unknown): ProductConfig {
+  return validate(raw);
+}
+
 function validate(raw: unknown): ProductConfig {
   if (!raw || typeof raw !== "object")
     throw new Error("product.json: not an object");
