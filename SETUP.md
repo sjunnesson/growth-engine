@@ -44,15 +44,20 @@ Create a **fine-grained PAT or GitHub App token** scoped to the two repos in
 A GitHub App is preferred (scoped, rotatable, auditable). Put the token in
 `GITHUB_TOKEN`.
 
-### 1.2 Postgres
-Provision a Postgres database (Vercel Postgres / Neon / any). Put the
-connection string in `DATABASE_URL`. Then create the schema:
+### 1.2 Database — zero setup by default
+You don't need to install anything: the engine can run a private Postgres
+inside the checkout (`.pgdata/`, real Postgres binaries shipped via npm).
+Either click **"Create a local database for me"** on the dashboard Setup
+page, or:
 
 ```bash
-npm run db:migrate
+npm run db:local     # provision .pgdata, write DATABASE_URL, apply schema
 ```
 
-`schema.sql` is idempotent; re-running is safe.
+It starts automatically whenever the engine runs (dashboard boot, every
+tick). Prefer your own Postgres (local server / Neon / Docker)? Put its
+connection string in `DATABASE_URL` and run `npm run db:migrate` — one
+database per engine instance either way.
 
 ### 1.3 AI — Claude Code CLI (no API key)
 Generation + critic shell out to `claude -p`, reusing existing Claude auth.
@@ -72,18 +77,15 @@ serverless lacks. The engine runs here instead, as a headless tick
 `CRON_SECRET` needed for normal operation.
 
 ```bash
-# 1. local Postgres (any Postgres works; Docker is simplest)
-docker run -d --name ge-pg -e POSTGRES_PASSWORD=pg -e POSTGRES_DB=growth_engine \
-  -p 5432:5432 postgres:16
-
-# 2. config
+# 1. config
 cd growth-engine
 cp .env.example .env.local
-#   set DATABASE_URL=postgres://postgres:pg@localhost:5432/growth_engine
 #   set GITHUB_TOKEN (for release polling + committing content to the website repo)
 #   leave DRY_RUN=true and LIVE_CHANNELS empty for now
 npm install
-npm run db:migrate
+
+# 2. database — the built-in local Postgres (or set DATABASE_URL yourself)
+npm run db:local
 
 # 3. confirm this host can do the AI + a real tick (still dry-run)
 npm run probe          # one real `claude -p` generation + lint, no DB

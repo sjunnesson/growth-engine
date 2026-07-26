@@ -5,7 +5,7 @@
 // 127.0.0.1) — the actions write instance-local files (.env.local, product/)
 // and spawn local child processes; nothing leaves the machine.
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, openSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, openSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -16,6 +16,9 @@ import {
   repoCandidates,
   SETUP_STATUS_FILE,
 } from "@/lib/setup";
+import { createLocalDb, isManagedUrl } from "@/lib/localdb";
+import { upsertEnvLocal } from "@/lib/envfile";
+import { productOrNull } from "@/lib/product";
 
 const ROOT = process.cwd();
 const ANSWERS_FILE = ".setup-answers.json";
@@ -136,20 +139,37 @@ export async function resetSetupAction() {
 // ---------------------------------------------------------------------------
 // env + infra steps (review phase)
 
-function readEnvLines(): string[] {
-  try {
-    return readFileSync(resolve(ROOT, ".env.local"), "utf-8").split("\n");
-  } catch {
-    return [];
-  }
+function migrate(): { ok: boolean; out: string } {
+  const r = spawnSync(
+    process.execPath,
+    ["--env-file-if-exists=.env.local", "--import", "tsx", "lib/db/migrate.ts"],
+    { cwd: ROOT, encoding: "utf-8", timeout: 90_000 },
+  );
+  return {
+    ok: r.status === 0,
+    out: `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n").slice(-3).join(" · "),
+  };
 }
 
-function upsertEnv(lines: string[], key: string, value: string): string[] {
-  const line = `${key}=${value}`;
-  const i = lines.findIndex((l) => l.startsWith(`${key}=`) || l.startsWith(`# ${key}=`));
-  if (i >= 0) lines[i] = line;
-  else lines.push(line);
-  return lines;
+/** The stupid-simple database path: provision the private in-checkout
+ *  Postgres (.pgdata), point DATABASE_URL at it, apply the schema. */
+export async function createLocalDbAction() {
+  // Belt to the UI's braces (the button only renders when no DB is set):
+  // never replace an existing external database out from under an instance.
+  const current = process.env.DATABASE_URL;
+  if (current && !isManagedUrl(current))
+    fail("this instance already has an external DATABASE_URL — remove it from .env.local first if you want the built-in local database");
+  const slug = productOrNull()?.slug ?? "growth";
+  let url = "";
+  try {
+    url = await createLocalDb(`${slug.replace(/-/g, "_")}_growth`);
+  } catch (e) {
+    fail(`could not create the local database: ${(e as Error).message}`);
+  }
+  upsertEnvLocal({ DATABASE_URL: url });
+  const m = migrate();
+  if (!m.ok) fail(`database created, but applying the schema failed — ${m.out}`);
+  ok("local database ready — it lives in .pgdata/ and starts automatically whenever the engine runs");
 }
 
 export async function saveEnvAction(formData: FormData) {
@@ -159,17 +179,14 @@ export async function saveEnvAction(formData: FormData) {
     if (v) updates[key] = v;
   }
   if (Object.keys(updates).length === 0) fail("nothing to save");
+  upsertEnvLocal(updates);
 
-  let lines = readEnvLines();
-  if (lines.length === 0)
-    lines = ["# Growth-engine instance env — created by the Setup page.", "DRY_RUN=true", "LIVE_CHANNELS="];
-  for (const [k, v] of Object.entries(updates)) {
-    lines = upsertEnv(lines, k, v);
-    // Make the value visible to THIS running dashboard too (Next loads
-    // .env.local only at boot; children re-read the file themselves).
-    if (k !== "PORT") process.env[k] = v;
+  // A pasted DATABASE_URL should be usable immediately — apply the schema now.
+  if (updates.DATABASE_URL) {
+    const m = migrate();
+    if (!m.ok) fail(`saved, but applying the schema failed — ${m.out}`);
+    ok("database connected and schema applied");
   }
-  writeFileSync(resolve(ROOT, ".env.local"), lines.join("\n").replace(/\n*$/, "\n"));
   ok(
     `saved ${Object.keys(updates).join(", ")} to .env.local` +
       (updates.PORT ? " — PORT takes effect on the next dashboard start" : ""),
@@ -177,14 +194,9 @@ export async function saveEnvAction(formData: FormData) {
 }
 
 export async function migrateAction() {
-  const r = spawnSync(
-    process.execPath,
-    ["--env-file-if-exists=.env.local", "--import", "tsx", "lib/db/migrate.ts"],
-    { cwd: ROOT, encoding: "utf-8", timeout: 90_000 },
-  );
-  const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n").slice(-3).join(" · ");
-  if (r.status === 0) ok(`migration applied — ${out}`);
-  fail(`migration failed — ${out || "no output"}`);
+  const m = migrate();
+  if (m.ok) ok(`schema applied — ${m.out}`);
+  fail(`schema apply failed — ${m.out || "no output"}`);
 }
 
 /** Full dry-run takes minutes (real generations) — detached, log-tailed. */

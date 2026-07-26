@@ -16,6 +16,7 @@ import { execFile } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { env } from "@/lib/env";
 import { isConfigured, product } from "@/lib/product";
+import { ensureLocalDb } from "@/lib/localdb";
 import { abortIfKilled, blockedBy, scopeFor } from "@/lib/killswitch";
 import {
   enqueueReleases,
@@ -50,6 +51,7 @@ async function main() {
     writeStatus({ ok: true, configured: false, tally: {}, ready: 0, queue: {} });
     return;
   }
+  await ensureLocalDb(); // managed .pgdata database: start it if stopped
   // Product drafted but infrastructure unfinished: also idle, and tell the
   // menu bar app it's a setup gap, not an engine failure.
   if (!process.env.DATABASE_URL) {

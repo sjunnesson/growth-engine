@@ -8,10 +8,12 @@
  * Social channels are deliberately excluded: their dry-run rows wait for
  * phase 3 and the approval queue.
  */
+import { ensureLocalDb } from "@/lib/localdb";
 import { sql } from "@/lib/db/client";
 import { retryItem } from "@/lib/queue";
 
 async function main() {
+  await ensureLocalDb();
   const rows = await sql<{ id: string; channel: string; dedupe_key: string }[]>`
     SELECT id, channel, dedupe_key FROM post_queue
     WHERE status = 'dry_run' AND channel IN ('changelog', 'blog', 'seo')

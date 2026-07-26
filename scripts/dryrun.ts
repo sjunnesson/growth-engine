@@ -103,6 +103,8 @@ function selfTestGuardrails(): boolean {
 }
 
 async function pipelineDryRun() {
+  const { ensureLocalDb } = await import("@/lib/localdb");
+  await ensureLocalDb();
   if (!process.env.DATABASE_URL) {
     console.log(
       "\n[skip] DATABASE_URL not set — skipping live pipeline dry-run.",

@@ -5,8 +5,10 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sql } from "@/lib/db/client";
 import { killSwitchScopes } from "@/lib/channels";
+import { ensureLocalDb } from "@/lib/localdb";
 
 async function main() {
+  await ensureLocalDb();
   const here = dirname(fileURLToPath(import.meta.url));
   const ddl = readFileSync(resolve(here, "schema.sql"), "utf-8");
   console.log("[migrate] applying schema.sql ...");

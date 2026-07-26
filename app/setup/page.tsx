@@ -13,8 +13,10 @@ import { defaultAnswers, readSetupStatus, type SetupStatus } from "@/lib/setup";
 import { loadEvergreen, loadSeoPages, loadComparisons } from "@/lib/sources/factbase";
 import { readFactsRaw } from "@/lib/factsheet";
 import { markReviewedAction } from "@/app/actions";
+import { isManagedUrl } from "@/lib/localdb";
 import {
   startSetupAction,
+  createLocalDbAction,
   resetSetupAction,
   saveEnvAction,
   migrateAction,
@@ -304,7 +306,9 @@ export default async function SetupPage({
       /* partial product dir — the checklist below still renders */
     }
     const el = envLocal();
-    const dbSet = Boolean(el.DATABASE_URL || process.env.DATABASE_URL);
+    const dbUrl = el.DATABASE_URL || process.env.DATABASE_URL || "";
+    const dbSet = Boolean(dbUrl);
+    const dbManaged = isManagedUrl(dbUrl);
     const ghSet = Boolean(el.GITHUB_TOKEN || process.env.GITHUB_TOKEN);
     const dryTail = tail(".dryrun.log", 8);
 
@@ -337,48 +341,88 @@ export default async function SetupPage({
           </p>
         </div>
 
-        <h2>B · Infrastructure</h2>
+        <h2>B · Database</h2>
+        <div className="card">
+          {dbSet ? (
+            <>
+              <div className="row">
+                <Pill
+                  ok
+                  yes={dbManaged ? "private local database (.pgdata) — starts automatically" : "external database connected"}
+                  no=""
+                />
+              </div>
+              <div className="row" style={{ marginTop: 8 }}>
+                <form action={migrateAction} className="inline">
+                  <button className="ghost" type="submit">Re-apply schema</button>
+                </form>
+                <span className="dim" style={{ fontSize: 12 }}>idempotent; safe anytime</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <form action={createLocalDbAction}>
+                <button className="primary" type="submit">
+                  Create a local database for me
+                </button>
+              </form>
+              <p className="dim" style={{ fontSize: 12, margin: "8px 0 0" }}>
+                Makes a private database inside this folder (<code>.pgdata/</code>),
+                sets everything up, and starts it automatically whenever the
+                engine runs. Nothing to install, no account, takes ~10 seconds.
+              </p>
+              <details style={{ marginTop: 10 }}>
+                <summary className="dim" style={{ fontSize: 12, cursor: "pointer" }}>
+                  Advanced: I already run Postgres
+                </summary>
+                <form action={saveEnvAction} style={{ marginTop: 8 }}>
+                  <input
+                    name="DATABASE_URL"
+                    placeholder={`postgres://user:pass@localhost:5432/${cfg.slug}_growth`}
+                    style={{ width: "100%", marginBottom: 8 }}
+                  />
+                  <button type="submit">Connect (applies the schema too)</button>
+                  <p className="dim" style={{ fontSize: 12, margin: "6px 0 0" }}>
+                    One database per engine instance — never share one between
+                    two products.
+                  </p>
+                </form>
+              </details>
+            </>
+          )}
+        </div>
+
+        <h2>C · Publishing &amp; scheduler</h2>
         <EngineStatusCard />
         <div className="card">
           <div className="row" style={{ marginBottom: 8 }}>
-            <Pill ok={dbSet} yes="DATABASE_URL set" no="DATABASE_URL missing" />
-            <Pill ok={ghSet} yes="GITHUB_TOKEN set" no="GITHUB_TOKEN missing (release polling + publishing off)" />
-            <span className="pill">PORT {el.PORT || "3400 (default)"}</span>
+            <Pill ok={ghSet} yes="GitHub token set" no="GitHub token missing — release polling + website publishing stay off" />
+            <span className="pill">dashboard port {el.PORT || "3400 (default)"}</span>
           </div>
           <form action={saveEnvAction}>
-            <label className="dim" style={{ fontSize: 12, display: "block" }}>
-              DATABASE_URL (one database per engine instance)
-            </label>
-            <input name="DATABASE_URL" placeholder={`postgres://localhost:5432/${cfg.slug}_growth`} style={{ width: "100%", marginBottom: 8 }} />
             <div className="row">
-              <div style={{ flex: 1 }}>
-                <label className="dim" style={{ fontSize: 12, display: "block" }}>
-                  PORT (unique per instance)
-                </label>
-                <input name="PORT" placeholder="3400" style={{ width: "100%" }} />
-              </div>
               <div style={{ flex: 2 }}>
                 <label className="dim" style={{ fontSize: 12, display: "block" }}>
-                  GITHUB_TOKEN (fine-grained: read releases repo, write website repo)
+                  GitHub token — lets the engine read your releases and commit
+                  content to your website repo (fine-grained PAT; optional until
+                  you go live)
                 </label>
                 <input name="GITHUB_TOKEN" type="password" placeholder="github_pat_…" style={{ width: "100%" }} />
               </div>
+              <div style={{ flex: 1 }}>
+                <label className="dim" style={{ fontSize: 12, display: "block" }}>
+                  Dashboard port (unique per instance)
+                </label>
+                <input name="PORT" placeholder={el.PORT || "3400"} style={{ width: "100%" }} />
+              </div>
             </div>
             <button type="submit" style={{ marginTop: 8 }}>
-              Save to .env.local
+              Save
             </button>
           </form>
-          <div className="row" style={{ marginTop: 10 }}>
-            <form action={migrateAction} className="inline">
-              <button type="submit">Apply database schema</button>
-            </form>
-            <span className="dim" style={{ fontSize: 12 }}>
-              idempotent; creates tables + kill-switch scopes
-            </span>
-          </div>
         </div>
 
-        <h2>C · Verify end-to-end (still dry-run)</h2>
+        <h2>D · Verify end-to-end (still dry-run)</h2>
         <div className="card">
           <form action={dryrunAction} className="inline">
             <button type="submit">Run the dry-run drill</button>
@@ -395,7 +439,7 @@ export default async function SetupPage({
           )}
         </div>
 
-        <h2>D · Sign off</h2>
+        <h2>E · Sign off</h2>
         <div className="card" style={{ borderColor: "var(--warn)" }}>
           <p className="dim" style={{ fontSize: 12, margin: "0 0 10px" }}>
             This is the closed-world guarantee: by confirming, you assert every

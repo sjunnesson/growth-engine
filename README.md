@@ -87,13 +87,14 @@ STEPS
    npm run setup -- --repo <product-repo> [--vault <vault>] --answers answers.json
    It drafts product/ (config, fact base, guardrails, content plan) with
    reviewed:false.
-6. Provision Postgres (existing server, else Docker postgres:16) with a
-   dedicated database, e.g. <slug>_growth — one DB per engine instance.
-   Create .env.local from .env.example: DATABASE_URL; a PORT no other
-   engine instance on this machine uses (default 3400); DRY_RUN=true;
-   LIVE_CHANNELS empty. Ask me for a fine-grained GitHub PAT (read on the
-   releases repo, read+write on the website repo) for GITHUB_TOKEN; leave
-   it blank if I don't have one yet.
+6. Database: run `npm run db:local` — it provisions a private Postgres
+   inside the checkout (.pgdata/), writes DATABASE_URL to .env.local, and
+   applies the schema; it starts automatically whenever the engine runs.
+   Only use an external Postgres if I ask for one. Then finish .env.local:
+   a PORT no other engine instance on this machine uses (default 3400);
+   DRY_RUN=true; LIVE_CHANNELS empty. Ask me for a fine-grained GitHub PAT
+   (read on the releases repo, read+write on the website repo) for
+   GITHUB_TOKEN; leave it blank if I don't have one yet.
 7. npm run db:migrate, then npm run dryrun. Every guardrail self-test line
    must PASS; with a DB configured, every pipeline row must end dry_run.
 8. If I'm on macOS and want the scheduler: ./deploy/build-menubar.sh, then

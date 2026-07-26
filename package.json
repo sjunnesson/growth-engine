@@ -12,6 +12,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "db:migrate": "node --env-file-if-exists=.env.local --import tsx lib/db/migrate.ts",
+    "db:local": "node --env-file-if-exists=.env.local --import tsx scripts/db-local.ts",
     "dryrun": "node --env-file-if-exists=.env.local --import tsx scripts/dryrun.ts",
     "probe": "node --env-file-if-exists=.env.local --import tsx scripts/probe-ai.ts",
     "once": "node --env-file-if-exists=.env.local --import tsx scripts/run.ts",
@@ -20,6 +21,7 @@
   },
   "dependencies": {
     "@octokit/rest": "^22.0.0",
+    "embedded-postgres": "^18.4.0-beta.17",
     "next": "16.1.6",
     "postgres": "^3.4.5",
     "react": "19.2.3",

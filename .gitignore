@@ -16,6 +16,7 @@ next-env.d.ts
 .setup-answers.json
 .setup.log
 .dryrun.log
+.pgdata/
 deploy/build/
 
 # Instance data — never committed to this (public) engine repo.

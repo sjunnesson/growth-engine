@@ -10,6 +10,7 @@
  * Dedupe keys match the organic enqueuers, so seeding an angle simply makes
  * it happen NOW instead of whenever rotation would have reached it.
  */
+import { ensureLocalDb } from "@/lib/localdb";
 import { enqueue, evergreenKey, contentKey } from "@/lib/dedupe";
 import { loadEvergreen } from "@/lib/sources/factbase";
 import { titleCase } from "@/lib/enqueuers";
@@ -19,6 +20,7 @@ import { sql } from "@/lib/db/client";
 const ACTOR = "seed:manual";
 
 async function main() {
+  await ensureLocalDb();
   const [channel, angleId] = process.argv.slice(2);
   const angles = loadEvergreen();
   const validChannels = ["blog", ...product().socialTargets];
