@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { isConfigured } from "@/lib/product";
 import { awaitingApproval, recentItems } from "@/lib/queue";
+import { blockReason } from "@/lib/guardrails/readable";
 import { approveAction, rejectAction, retryAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -96,6 +97,14 @@ export default async function QueuePage() {
       )}
 
       <h2>Recent ({recent.length})</h2>
+      <p className="dim" style={{ fontSize: 12, margin: "0 0 8px" }}>
+        <span className="pill bad">skipped</span> = a guardrail declined it
+        (reason shown; Retry regenerates fresh copy) ·{" "}
+        <span className="pill warn">dry_run</span> = passed every check, but
+        the channel isn&apos;t live yet ·{" "}
+        <span className="pill">generating</span> = in progress (a stranded one
+        is picked back up automatically within the hour)
+      </p>
       <div className="card" style={{ overflowX: "auto" }}>
         {recent.length === 0 ? (
           <span className="empty">No history yet.</span>
@@ -121,13 +130,51 @@ export default async function QueuePage() {
                   <td className="dim">{r.source_kind}</td>
                   <td>{statusPill(r.status)}</td>
                   <td style={{ maxWidth: 380 }}>
-                    {r.last_error ? (
-                      <span style={{ color: "var(--bad)" }}>{r.last_error}</span>
-                    ) : (
-                      <span className="dim">
-                        {(r.generated_text ?? "").slice(0, 140)}
-                      </span>
-                    )}
+                    {(() => {
+                      const reason = blockReason(
+                        r.generated_meta as Record<string, unknown> | null,
+                      );
+                      if (r.status === "skipped" && reason)
+                        return (
+                          <>
+                            <span style={{ color: "var(--bad)" }}>
+                              {reason.gate === "guardrails"
+                                ? "Blocked by a guardrail: "
+                                : "Blocked by the AI reviewer: "}
+                              {reason.summary}
+                            </span>
+                            {reason.details.length > 1 && (
+                              <details>
+                                <summary className="dim" style={{ fontSize: 12, cursor: "pointer" }}>
+                                  all {reason.details.length} reasons
+                                </summary>
+                                <ul className="dim" style={{ fontSize: 12, margin: "4px 0", paddingLeft: 18 }}>
+                                  {reason.details.map((d) => (
+                                    <li key={d}>{d}</li>
+                                  ))}
+                                </ul>
+                              </details>
+                            )}
+                            {r.generated_text && (
+                              <details>
+                                <summary className="dim" style={{ fontSize: 12, cursor: "pointer" }}>
+                                  the declined copy
+                                </summary>
+                                <span className="dim" style={{ fontSize: 12, whiteSpace: "pre-wrap" }}>
+                                  {r.generated_text.slice(0, 600)}
+                                </span>
+                              </details>
+                            )}
+                          </>
+                        );
+                      if (r.last_error)
+                        return <span style={{ color: "var(--bad)" }}>{r.last_error}</span>;
+                      return (
+                        <span className="dim">
+                          {(r.generated_text ?? "").slice(0, 140)}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td>
                     {r.status === "published" &&

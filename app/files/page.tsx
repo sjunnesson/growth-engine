@@ -15,26 +15,8 @@ import {
   seoPageAction,
   comparisonAction,
 } from "@/app/files/actions";
+import { readablePattern } from "@/lib/guardrails/readable";
 
-/** Human rendering of a guardrail pattern: regex plumbing (\b, \s+, escapes,
- *  non-capturing groups) becomes plain text; alternations keep their pipes.
- *  Falls back to the raw pattern when it uses constructs we can't simplify. */
-function readablePattern(p: string): { text: string; isRegex: boolean } {
-  if (!/[\\()[\]|+*?^${}]/.test(p)) return { text: p, isRegex: false };
-  const simplified = p
-    .replace(/\\b/g, "")
-    .replace(/\\s[+*]/g, " ")
-    .replace(/\[[-\s]+\]/g, " ")
-    .replace(/\(\?:/g, "(")
-    .replace(/\\([$€£%'./-])/g, "$1")
-    .replace(/'\??/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
-  // Only claim readability when nothing regex-y survives except (a|b) groups.
-  const test = simplified.replace(/[()|]/g, "");
-  if (/[\\[\]+*?^${}]/.test(test)) return { text: p, isRegex: true };
-  return { text: simplified, isRegex: true };
-}
 
 export const dynamic = "force-dynamic";
 
