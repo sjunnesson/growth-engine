@@ -81,7 +81,7 @@ const STAGES: [SetupStatus["stage"], string][] = [
   ["writing", "Writing product/"],
 ];
 
-function Progress({ status }: { status: SetupStatus }) {
+function Progress({ status, logTail }: { status: SetupStatus; logTail: string }) {
   const idx = STAGES.findIndex(([k]) => k === status.stage);
   return (
     <div className="card">
@@ -100,9 +100,44 @@ function Progress({ status }: { status: SetupStatus }) {
           <span className={i > idx ? "dim" : undefined}>{label}</span>
         </div>
       ))}
+      {logTail && (
+        <pre style={{ fontSize: 11.5, marginTop: 10, whiteSpace: "pre-wrap" }}>{logTail}</pre>
+      )}
       <p className="dim" style={{ fontSize: 12, marginTop: 8 }}>
-        Log: <code>.setup.log</code> · started{" "}
+        Full log: <code>.setup.log</code> · started{" "}
         {new Date(status.startedAt).toLocaleTimeString()}
+      </p>
+    </div>
+  );
+}
+
+/** Is the scheduler (menu bar app / launchd) actually feeding the engine? */
+function EngineStatusCard() {
+  let ts: Date | null = null;
+  let incomplete = "";
+  try {
+    const s = JSON.parse(readFileSync(resolve(ROOT, ".status.json"), "utf-8"));
+    ts = s.ts ? new Date(s.ts) : null;
+    incomplete = s.setupIncomplete ?? "";
+  } catch {
+    /* no tick yet */
+  }
+  const fresh = ts !== null && Date.now() - ts.getTime() < 40 * 60 * 1000;
+  const when = ts ? ts.toLocaleTimeString() : "";
+  return (
+    <div className="card">
+      <div className="row">
+        <Pill
+          ok={fresh}
+          yes={`scheduler active — last tick ${when}`}
+          no={ts ? `last tick ${when} (stale)` : "no tick recorded yet"}
+        />
+        {incomplete && <span className="pill warn">tick idling: {incomplete}</span>}
+      </div>
+      <p className="dim" style={{ fontSize: 12, margin: "8px 0 0" }}>
+        The menu bar app is the scheduler: it runs a tick every 30 minutes
+        while it&apos;s open. Not built yet? <code>./deploy/build-menubar.sh</code>{" "}
+        then add the app to Login Items.
       </p>
     </div>
   );
@@ -303,6 +338,7 @@ export default async function SetupPage({
         </div>
 
         <h2>B · Infrastructure</h2>
+        <EngineStatusCard />
         <div className="card">
           <div className="row" style={{ marginBottom: 8 }}>
             <Pill ok={dbSet} yes="DATABASE_URL set" no="DATABASE_URL missing" />
@@ -383,7 +419,7 @@ export default async function SetupPage({
       <main>
         <h1>Setup</h1>
         <Msg msg={msg} err={err} />
-        <Progress status={status} />
+        <Progress status={status} logTail={tail(".setup.log", 12)} />
       </main>
     );
   }

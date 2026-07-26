@@ -50,12 +50,18 @@ async function main() {
     writeStatus({ ok: true, configured: false, tally: {}, ready: 0, queue: {} });
     return;
   }
+  // Product drafted but infrastructure unfinished: also idle, and tell the
+  // menu bar app it's a setup gap, not an engine failure.
   if (!process.env.DATABASE_URL) {
-    console.error(
-      "[run] DATABASE_URL not set. Start a local Postgres and set it in\n" +
-        "      .env.local (see SETUP.md). Aborting.",
-    );
-    process.exit(1);
+    console.log("[run] DATABASE_URL not set — finish setup in the dashboard.");
+    writeStatus({
+      ok: true,
+      setupIncomplete: "no database yet",
+      tally: {},
+      ready: 0,
+      queue: {},
+    });
+    return;
   }
 
   if (await abortIfKilled(ACTOR, "global")) {
