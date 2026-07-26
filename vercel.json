@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    { "path": "/api/cron/poll-releases", "schedule": "*/30 * * * *" },
+    { "path": "/api/cron/content-sync", "schedule": "0 6 * * *" },
+    { "path": "/api/cron/social-drip", "schedule": "0 14 * * 1,3,5" },
+    { "path": "/api/cron/dispatch", "schedule": "0 * * * *" }
+  ],
+  "functions": {
+    "app/api/cron/**/route.ts": { "maxDuration": 300 }
+  }
+}

@@ -1,0 +1,22 @@
+node_modules
+.next
+out
+.env
+.env.local
+.env*.local
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+
+.runner.log
+.dashboard.log
+.status.json
+.setup-analysis/
+deploy/build/
+
+# Instance data — never committed to this (public) engine repo.
+# product/ holds the per-product config + fact base; version it in its own
+# private repo (git init inside product/) if you want history.
+/product/
+BACKLOG.md

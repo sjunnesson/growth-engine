@@ -1,0 +1,36 @@
+{
+  "name": "growth-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Product-agnostic autonomous marketing engine (content/SEO + social). Point it at a repo + Obsidian vault via `npm run setup`; product specifics live in product/. Lives outside the product on purpose.",
+  "scripts": {
+    "dev": "next dev -H 127.0.0.1 -p ${PORT:-3400}",
+    "build": "next build",
+    "start": "next start -H 127.0.0.1 -p ${PORT:-3400}",
+    "dashboard": "next start -H 127.0.0.1 -p ${PORT:-3400}",
+    "setup": "node --env-file-if-exists=.env.local --import tsx scripts/setup.ts",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node --env-file-if-exists=.env.local --import tsx lib/db/migrate.ts",
+    "dryrun": "node --env-file-if-exists=.env.local --import tsx scripts/dryrun.ts",
+    "probe": "node --env-file-if-exists=.env.local --import tsx scripts/probe-ai.ts",
+    "once": "node --env-file-if-exists=.env.local --import tsx scripts/run.ts",
+    "seed": "node --env-file-if-exists=.env.local --import tsx scripts/seed.ts",
+    "promote": "node --env-file-if-exists=.env.local --import tsx scripts/promote-dryrun.ts"
+  },
+  "dependencies": {
+    "@octokit/rest": "^22.0.0",
+    "next": "16.1.6",
+    "postgres": "^3.4.5",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "tsx": "^4.19.2",
+    "typescript": "^5"
+  }
+}

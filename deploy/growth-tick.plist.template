@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Rendered by deploy/install-launchd.sh — do not edit the installed copy by
+     hand; re-run the installer. Runs one engine tick every @INTERVAL@s. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>@LABEL@</string>
+
+  <!-- The launcher wrapper (not node directly) so macOS background-item
+       lists show "<Product> Marketing Engine" instead of "node". -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>@TICK@</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>@REPO@</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- PATH must include node AND the `claude` CLI so the AI provider works -->
+    <key>PATH</key>
+    <string>@PATH@</string>
+    <key>NODE_BIN</key>
+    <string>@NODE@</string>
+  </dict>
+
+  <key>StartInterval</key>
+  <integer>@INTERVAL@</integer>
+
+  <!-- Do not fire the moment it's loaded; wait for the first interval. -->
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>@REPO@/.runner.log</string>
+  <key>StandardErrorPath</key>
+  <string>@REPO@/.runner.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>
