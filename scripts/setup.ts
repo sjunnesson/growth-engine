@@ -155,12 +155,38 @@ function parseJsonReply(text: string): unknown {
   try {
     return JSON.parse(stripped);
   } catch {
-    const start = Math.min(
-      ...["{", "["].map((c) => stripped.indexOf(c)).filter((i) => i >= 0),
-    );
+    const starts = ["{", "["].map((c) => stripped.indexOf(c)).filter((i) => i >= 0);
     const end = Math.max(stripped.lastIndexOf("}"), stripped.lastIndexOf("]"));
-    return JSON.parse(stripped.slice(start, end + 1));
+    if (starts.length === 0 || end < 0)
+      throw new Error(`no JSON found in reply (head: ${JSON.stringify(text.slice(0, 120))})`);
+    return JSON.parse(stripped.slice(Math.min(...starts), end + 1));
   }
+}
+
+/** JSON drafting call with retries — models occasionally wrap the JSON in
+ *  prose or truncate; a retry with a reinforcement line almost always fixes
+ *  it, and one flaky reply must not kill a whole (paid) wizard run. */
+async function draftJson<T>(
+  label: string,
+  system: string,
+  user: string,
+  model: string,
+): Promise<T> {
+  let lastErr = "";
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const sys =
+      attempt === 1
+        ? system
+        : `${system}\n\nREMINDER: your ENTIRE reply must be the JSON value itself. No prose, no markdown fences, no explanation.`;
+    const r = await runClaude(sys, user, model);
+    try {
+      return parseJsonReply(r.text) as T;
+    } catch (e) {
+      lastErr = (e as Error).message;
+      console.warn(`[setup] ${label}: attempt ${attempt}/3 reply was not valid JSON (${lastErr}) — retrying`);
+    }
+  }
+  throw new Error(`${label}: no valid JSON after 3 attempts (${lastErr})`);
 }
 
 /** Ask Claude (critic model — triage is cheap) which notes matter, then read
@@ -224,6 +250,20 @@ interface Answers {
 const kebab = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
+/** Accept owner/repo in any common spelling: bare, full https URL, git URL,
+ *  trailing .git. The engine needs the bare "owner/repo" form. */
+function normalizeRepo(input: string): string {
+  const s = input
+    .trim()
+    .replace(/^(https?:\/\/)?(www\.)?github\.com[/:]/i, "")
+    .replace(/^git@github\.com:/i, "")
+    .replace(/\.git$/i, "")
+    .replace(/\/+$/, "");
+  if (s && !/^[\w.-]+\/[\w.-]+$/.test(s))
+    throw new Error(`"${input}" is not a GitHub repo — expected owner/repo (or a github.com URL)`);
+  return s;
+}
+
 async function interview(repoEvidence: string, answersFile?: string): Promise<Answers> {
   const inferredName =
     repoEvidence.match(/"name":\s*"([^"@/]+)"/)?.[1] ??
@@ -258,7 +298,8 @@ async function interview(repoEvidence: string, answersFile?: string): Promise<An
     }
     a.slug = a.slug || kebab(a.name);
     a.siteUrl = a.siteUrl || `https://${a.domain}`;
-    a.releasesRepo = a.releasesRepo || a.websiteRepo;
+    a.websiteRepo = normalizeRepo(a.websiteRepo);
+    a.releasesRepo = normalizeRepo(a.releasesRepo) || a.websiteRepo;
     return a;
   }
 
@@ -279,9 +320,13 @@ async function interview(repoEvidence: string, answersFile?: string): Promise<An
   a.slug = kebab(await ask("Slug (kebab-case id)", kebab(a.name)));
   a.domain = await ask("Canonical domain (e.g. example.com)", "");
   a.siteUrl = await ask("Site URL", a.domain ? `https://${a.domain}` : "");
-  a.websiteRepo = await ask("Website GitHub repo the engine commits content into (owner/repo)", "");
+  a.websiteRepo = normalizeRepo(
+    await ask("Website GitHub repo the engine commits content into (owner/repo)", ""),
+  );
   a.websiteBranch = await ask("Website branch", "main");
-  a.releasesRepo = await ask("GitHub repo whose Releases feed the changelog (owner/repo)", a.websiteRepo);
+  a.releasesRepo = normalizeRepo(
+    await ask("GitHub repo whose Releases feed the changelog (owner/repo)", a.websiteRepo),
+  );
   a.format = (await ask("Content file format: json | markdown", "markdown")) === "json" ? "json" : "markdown";
   a.tagScheme = (await ask("Release tag scheme: semver | any", "semver")) === "any" ? "any" : "semver";
   a.socialTargets = await askList("Social channels to target (mastodon,bluesky,linkedin,reddit,x)", defaults.socialTargets);
@@ -348,8 +393,12 @@ async function draftGuardrails(repoEv: string, vaultEv: string, a: Answers): Pro
 - Regexes for anything in the operator's never-claim list.
 Also produce 1-4 short "criticNotes": product-specific sentences for an LLM reviewer (e.g. "Implying the Free tier is unlimited is a violation (capped at N)").
 Keep patterns precise — they BLOCK copy on match, so an over-broad regex silences legitimate copy. Reply with ONLY compact JSON: {"bannedPhrases": string[], "criticNotes": string[]}.`;
-  const r = await runClaude(system, evidenceBlock(repoEv, vaultEv, a), env.genModel);
-  const j = parseJsonReply(r.text) as Partial<GuardrailDraft>;
+  const j = await draftJson<Partial<GuardrailDraft>>(
+    "guardrails",
+    system,
+    evidenceBlock(repoEv, vaultEv, a),
+    env.genModel,
+  );
   const phrases = (j.bannedPhrases ?? []).filter((p) => {
     try {
       new RegExp(String(p), "i");
@@ -377,8 +426,12 @@ async function draftContentPlan(repoEv: string, vaultEv: string, a: Answers): Pr
 - "seoPages": 4-6 landing-page briefs. Each: {"slug": kebab-case, "audience": who it's for, "intent": the search intent it answers, "primaryFeature": the evidenced feature it leans on}.
 - "comparisons": 0-3 category comparisons (vs a CATEGORY like "web clippers", never a named competitor). Each: {"slug": kebab-case, "category": the category, "angle": what makes this product's approach different, factually}.
 Reply with ONLY compact JSON: {"angles": [...], "seoPages": [...], "comparisons": [...]}.`;
-  const r = await runClaude(system, evidenceBlock(repoEv, vaultEv, a), env.genModel);
-  const j = parseJsonReply(r.text) as Partial<ContentDraft>;
+  const j = await draftJson<Partial<ContentDraft>>(
+    "content plan",
+    system,
+    evidenceBlock(repoEv, vaultEv, a),
+    env.genModel,
+  );
 
   const okSlug = (s: unknown) => typeof s === "string" && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s);
   const okCta = (c: unknown) => {
@@ -496,16 +549,32 @@ async function main() {
 
   const a = await interview(repoEv, args.answersFile);
 
+  // A failed later stage must not throw away the earlier (paid) drafts:
+  // facts are essential, guardrails/plan degrade to empty with a warning and
+  // can be filled by hand or by re-running setup with --out.
   console.log(`\n[setup] drafting fact base (${env.genModel}) ...`);
   const facts = await draftFacts(repoEv, vaultEv, a);
   console.log(`[setup] drafting guardrails ...`);
-  const guard = await draftGuardrails(repoEv, vaultEv, a);
+  let guard: GuardrailDraft = { bannedPhrases: [], criticNotes: [] };
+  try {
+    guard = await draftGuardrails(repoEv, vaultEv, a);
+  } catch (e) {
+    console.warn(`[setup] WARNING: guardrail drafting failed (${(e as Error).message}) — banned-claims.json will carry only the engine base patterns; add product patterns by hand.`);
+  }
   console.log(`[setup] drafting content plan ...`);
-  const plan = await draftContentPlan(repoEv, vaultEv, a);
+  let plan: ContentDraft = { angles: [], seoPages: [], comparisons: [] };
+  try {
+    plan = await draftContentPlan(repoEv, vaultEv, a);
+  } catch (e) {
+    console.warn(`[setup] WARNING: content-plan drafting failed (${(e as Error).message}) — angle/SEO/comparison files will be empty; add entries via the dashboard.`);
+  }
   if (plan.angles.length === 0)
-    console.warn("[setup] WARNING: no valid evergreen angles survived validation — add some by hand (the drip needs at least one).");
+    console.warn("[setup] WARNING: no valid evergreen angles — add some by hand (the drip needs at least one).");
 
   writeProductDir(args.out, a, facts, guard, plan);
+  // Persist the interview so a re-run is one flag away, never a retype:
+  //   npm run setup -- --repo <repo> --answers <out>/setup-answers.json --out <fresh-dir>
+  writeFileSync(join(args.out, "setup-answers.json"), JSON.stringify(a, null, 2) + "\n");
 
   const todos = (facts.match(/TODO\(verify\)/g) ?? []).length;
   console.log(`
