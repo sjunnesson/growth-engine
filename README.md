@@ -18,7 +18,75 @@ The engine lives **outside** the product on purpose: it may only touch the
 GitHub API, the `claude` CLI, social platform APIs, and its own Postgres —
 never the product's code or telemetry posture.
 
-## Onboarding a new product
+## Install with an AI agent (copy-paste prompt)
+
+Launch an agentic coding assistant with shell access (e.g. Claude Code) in
+the folder that contains your product's source repo and paste this:
+
+```text
+Set up growth-engine (https://github.com/sjunnesson/growth-engine), an
+autonomous marketing engine, for the product whose source code is in or near
+the current directory. Work step by step; verify each step before the next.
+
+CONTEXT: growth-engine is a Next.js + Postgres app that generates
+changelog/blog/SEO/social marketing copy for ONE product under strict
+guardrails. One engine checkout serves one product; product-specific config
+lives in its gitignored product/ dir, drafted by the onboarding wizard. AI
+generation shells out to the Claude Code CLI ("claude -p") using the
+machine's existing Claude auth — no API key. The engine is safe by default:
+everything stays dry-run until the HUMAN reviews the generated fact base.
+
+YOUR HARD LIMITS: never set DRY_RUN=false, never populate LIVE_CHANNELS,
+never set "reviewed": true in product.json, never resolve TODO(verify)
+markers in the generated fact base yourself, never publish anything. Those
+are human-only actions.
+
+STEPS
+1. Survey the current directory and identify the product's source repo
+   (may be the current dir or a subdirectory). Confirm your pick with me,
+   and ask whether I have an Obsidian vault (or any markdown-notes folder)
+   about the product worth mining; get its path.
+2. Preflight — report anything missing and help me install it: git,
+   Node.js 20+, npm; the "claude" CLI on PATH and authenticated (verify:
+   claude -p "say ok" --model haiku); Postgres (existing server or Docker);
+   macOS + Xcode Command Line Tools only if I want the menu bar scheduler.
+3. Clone the engine NEXT TO the product repo (never inside it):
+   git clone https://github.com/sjunnesson/growth-engine.git <slug>-growth
+   Then npm install inside it, and read its README.md and SETUP.md — they
+   add detail this prompt omits.
+4. Interview me conversationally instead of running the interactive wizard
+   (read the interview() function in scripts/setup.ts for the full question
+   list): product name, slug, canonical domain, site URL, website GitHub
+   repo (owner/repo) that content gets committed into, website branch,
+   releases repo, content file format (json | markdown), release tag scheme
+   (semver | any), social channels to target, CTA paths, EXACT allowed
+   price tokens, pricing model in one or two sentences, competitor names
+   never to characterize, and anything the copy must NEVER claim. Save my
+   answers to answers.json.
+5. Run the wizard non-interactively:
+   npm run setup -- --repo <product-repo> [--vault <vault>] --answers answers.json
+   It drafts product/ (config, fact base, guardrails, content plan) with
+   reviewed:false.
+6. Provision Postgres (existing server, else Docker postgres:16) with a
+   dedicated database, e.g. <slug>_growth — one DB per engine instance.
+   Create .env.local from .env.example: DATABASE_URL; a PORT no other
+   engine instance on this machine uses (default 3400); DRY_RUN=true;
+   LIVE_CHANNELS empty. Ask me for a fine-grained GitHub PAT (read on the
+   releases repo, read+write on the website repo) for GITHUB_TOKEN; leave
+   it blank if I don't have one yet.
+7. npm run db:migrate, then npm run dryrun. Every guardrail self-test line
+   must PASS; with a DB configured, every pipeline row must end dry_run.
+8. If I'm on macOS and want the scheduler: ./deploy/build-menubar.sh, then
+   tell me to open the app it built in deploy/build/ and add it to Login
+   Items. Otherwise show me the manual tick: npm run once.
+9. Hand off with a short report: what you set up, where, and my remaining
+   HUMAN-ONLY checklist — (a) review product/factbase/facts.md (fix every
+   TODO(verify), delete anything not literally true), banned-claims.json,
+   and product.json; (b) npm run dev → dashboard Overview → "I reviewed the
+   fact base"; (c) go live gradually via LIVE_CHANNELS per SETUP.md.
+```
+
+## Onboarding a new product (manual)
 
 ```bash
 # a fresh checkout per product, then:
