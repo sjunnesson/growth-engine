@@ -151,6 +151,25 @@ function migrate(): { ok: boolean; out: string } {
   };
 }
 
+/** Fire one engine tick in the background (detached; output appends to the
+ *  runner log). Used right after the database appears so .status.json stops
+ *  saying "no database yet" within seconds instead of at the next scheduled
+ *  tick — concurrent ticks are safe (row claiming uses SKIP LOCKED). */
+function spawnTick() {
+  const log = openSync(resolve(ROOT, ".runner.log"), "a");
+  const child = spawn(
+    process.execPath,
+    ["--env-file-if-exists=.env.local", "--import", "tsx", "scripts/run.ts"],
+    { cwd: ROOT, detached: true, stdio: ["ignore", log, log] },
+  );
+  child.unref();
+}
+
+export async function tickNowAction() {
+  spawnTick();
+  ok("tick started — status updates below in a few seconds");
+}
+
 /** The stupid-simple database path: provision the private in-checkout
  *  Postgres (.pgdata), point DATABASE_URL at it, apply the schema. */
 export async function createLocalDbAction() {
@@ -169,6 +188,7 @@ export async function createLocalDbAction() {
   upsertEnvLocal({ DATABASE_URL: url });
   const m = migrate();
   if (!m.ok) fail(`database created, but applying the schema failed — ${m.out}`);
+  spawnTick(); // refresh engine status immediately, not at the next half-hour
   ok("local database ready — it lives in .pgdata/ and starts automatically whenever the engine runs");
 }
 
@@ -185,6 +205,7 @@ export async function saveEnvAction(formData: FormData) {
   if (updates.DATABASE_URL) {
     const m = migrate();
     if (!m.ok) fail(`saved, but applying the schema failed — ${m.out}`);
+    spawnTick();
     ok("database connected and schema applied");
   }
   ok(

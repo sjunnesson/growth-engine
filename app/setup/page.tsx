@@ -21,6 +21,7 @@ import {
   saveEnvAction,
   migrateAction,
   dryrunAction,
+  tickNowAction,
 } from "@/app/setup/actions";
 import AutoRefresh from "@/app/setup/AutoRefresh";
 
@@ -113,8 +114,11 @@ function Progress({ status, logTail }: { status: SetupStatus; logTail: string })
   );
 }
 
-/** Is the scheduler (menu bar app / launchd) actually feeding the engine? */
-function EngineStatusCard() {
+/** Is the scheduler (menu bar app / launchd) actually feeding the engine?
+ *  `dbSet` is the CURRENT truth about the database — the tick's verdict in
+ *  .status.json can predate it, and a stale "no database yet" next to a green
+ *  database card reads as a contradiction. */
+function EngineStatusCard({ dbSet }: { dbSet: boolean }) {
   let ts: Date | null = null;
   let incomplete = "";
   try {
@@ -124,6 +128,7 @@ function EngineStatusCard() {
   } catch {
     /* no tick yet */
   }
+  const staleVerdict = dbSet && /database/i.test(incomplete);
   const fresh = ts !== null && Date.now() - ts.getTime() < 40 * 60 * 1000;
   const when = ts ? ts.toLocaleTimeString() : "";
   return (
@@ -134,8 +139,17 @@ function EngineStatusCard() {
           yes={`scheduler active — last tick ${when}`}
           no={ts ? `last tick ${when} (stale)` : "no tick recorded yet"}
         />
-        {incomplete && <span className="pill warn">tick idling: {incomplete}</span>}
+        {incomplete && !staleVerdict && (
+          <span className="pill warn">tick idling: {incomplete}</span>
+        )}
+        {staleVerdict && (
+          <span className="pill">last tick ran before the database existed — refreshing</span>
+        )}
+        <form action={tickNowAction} className="inline" style={{ marginLeft: "auto" }}>
+          <button className="ghost" type="submit">Run tick now</button>
+        </form>
       </div>
+      {staleVerdict && <AutoRefresh seconds={5} />}
       <p className="dim" style={{ fontSize: 12, margin: "8px 0 0" }}>
         The menu bar app is the scheduler: it runs a tick every 30 minutes
         while it&apos;s open. Not built yet? <code>./deploy/build-menubar.sh</code>{" "}
@@ -393,7 +407,7 @@ export default async function SetupPage({
         </div>
 
         <h2>C · Publishing &amp; scheduler</h2>
-        <EngineStatusCard />
+        <EngineStatusCard dbSet={dbSet} />
         <div className="card">
           <div className="row" style={{ marginBottom: 8 }}>
             <Pill ok={ghSet} yes="GitHub token set" no="GitHub token missing — release polling + website publishing stay off" />
