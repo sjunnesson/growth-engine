@@ -9,9 +9,32 @@ import { SOCIAL_CHANNELS } from "@/lib/channels";
 import {
   saveProductConfigAction,
   saveGuardrailsAction,
+  addBannedPhraseAction,
+  removeBannedPhraseAction,
+  bulkBannedPhrasesAction,
   seoPageAction,
   comparisonAction,
 } from "@/app/files/actions";
+
+/** Human rendering of a guardrail pattern: regex plumbing (\b, \s+, escapes,
+ *  non-capturing groups) becomes plain text; alternations keep their pipes.
+ *  Falls back to the raw pattern when it uses constructs we can't simplify. */
+function readablePattern(p: string): { text: string; isRegex: boolean } {
+  if (!/[\\()[\]|+*?^${}]/.test(p)) return { text: p, isRegex: false };
+  const simplified = p
+    .replace(/\\b/g, "")
+    .replace(/\\s[+*]/g, " ")
+    .replace(/\[[-\s]+\]/g, " ")
+    .replace(/\(\?:/g, "(")
+    .replace(/\\([$€£%'./-])/g, "$1")
+    .replace(/'\??/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+  // Only claim readability when nothing regex-y survives except (a|b) groups.
+  const test = simplified.replace(/[()|]/g, "");
+  if (/[\\[\]+*?^${}]/.test(test)) return { text: p, isRegex: true };
+  return { text: simplified, isRegex: true };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -40,11 +63,9 @@ function Field({
   required?: boolean;
 }) {
   return (
-    <div style={{ flex: 1, minWidth: 180 }}>
-      <label className="dim" style={label}>
-        {title}
-      </label>
-      <input name={name} defaultValue={def} placeholder={placeholder} required={required} style={full} />
+    <div className="field">
+      <label>{title}</label>
+      <input name={name} defaultValue={def} placeholder={placeholder} required={required} />
     </div>
   );
 }
@@ -101,34 +122,30 @@ export default async function FilesPage({
         <h2>Product config</h2>
         <div className="card">
           <form action={saveProductConfigAction}>
-            <div className="row">
+            <div className="row fields">
               <Field name="name" title="Product name" def={cfg.name} required />
               <Field name="slug" title="Slug (internal id)" def={cfg.slug} />
-              <Field name="domain" title="Canonical domain (all links must live on it)" def={cfg.domain} required />
+              <Field name="domain" title="Canonical domain" def={cfg.domain} required />
               <Field name="siteUrl" title="Site URL" def={cfg.siteUrl} />
             </div>
-            <div className="row">
-              <Field name="websiteRepo" title="Website repo (content gets committed here)" def={cfg.github.websiteRepo} required />
+            <div className="row fields">
+              <Field name="websiteRepo" title="Website repo" def={cfg.github.websiteRepo} required />
               <Field name="websiteBranch" title="Website branch" def={cfg.github.websiteBranch} />
-              <Field name="releasesRepo" title="Releases repo (feeds the changelog)" def={cfg.github.releasesRepo} />
+              <Field name="releasesRepo" title="Releases repo" def={cfg.github.releasesRepo} />
             </div>
-            <div className="row">
+            <div className="row fields">
               <Field name="ctaRelease" title="CTA path: release posts" def={cfg.cta.release} />
               <Field name="ctaSeo" title="CTA path: SEO pages" def={cfg.cta.seo} />
               <Field name="ctaComparison" title="CTA path: comparisons" def={cfg.cta.comparison} />
-              <div style={{ flex: 1, minWidth: 140 }}>
-                <label className="dim" style={label}>
-                  Content file format
-                </label>
+              <div className="field" style={{ maxWidth: 180 }}>
+                <label>Content file format</label>
                 <select name="format" defaultValue={cfg.site.format}>
                   <option value="markdown">markdown</option>
                   <option value="json">json</option>
                 </select>
               </div>
-              <div style={{ flex: 1, minWidth: 140 }}>
-                <label className="dim" style={label}>
-                  Release tag scheme
-                </label>
+              <div className="field" style={{ maxWidth: 180 }}>
+                <label>Release tag scheme</label>
                 <select name="tagScheme" defaultValue={cfg.releases.tagScheme}>
                   <option value="semver">semver</option>
                   <option value="any">any</option>
@@ -193,24 +210,22 @@ export default async function FilesPage({
         <h2>Guardrails — what copy may never say</h2>
         <div className="card">
           <form action={saveGuardrailsAction}>
-            <div className="row">
+            <div className="row fields">
               <Field
                 name="allowedPriceTokens"
-                title="Exact prices copy may state, comma-separated (empty = no prices ever)"
+                title="Allowed prices, comma-separated (empty = none ever)"
                 def={banned.allowedPriceTokens.join(", ")}
                 placeholder="$0, $19"
               />
               <Field
                 name="allowedDomains"
-                title="Domains links may point to, comma-separated"
+                title="Allowed link domains, comma-separated"
                 def={banned.allowedDomains.join(", ")}
                 required
               />
-              <div style={{ minWidth: 120 }}>
-                <label className="dim" style={label}>
-                  Max emoji per post
-                </label>
-                <input name="maxEmoji" type="number" min={0} defaultValue={banned.maxEmoji} />
+              <div className="field" style={{ maxWidth: 140 }}>
+                <label>Max emoji per post</label>
+                <input name="maxEmoji" type="number" min={0} defaultValue={banned.maxEmoji} style={{ width: 80 }} />
               </div>
             </div>
             <label style={{ fontSize: 13, display: "block", marginTop: 10 }}>
@@ -221,22 +236,71 @@ export default async function FilesPage({
               />{" "}
               Require exactly one link per post, on an allowed domain
             </label>
-            <label className="dim" style={label}>
-              Blocked phrases — one per line. Plain text works ("free forever");
-              patterns work too ("better than (acme|other)"). A match blocks the
-              copy from publishing. Engine-wide hype/AI-slop patterns are always
-              active on top of these.
-            </label>
-            <textarea
-              name="bannedPhrases"
-              defaultValue={banned.bannedPhrases.join("\n")}
-              spellCheck={false}
-              style={{ minHeight: 160, fontFamily: "ui-monospace, monospace", fontSize: 12.5 }}
-            />
-            <button className="primary" type="submit">
-              Save guardrails
-            </button>
+            <div style={{ marginTop: 10 }}>
+              <button className="primary" type="submit">
+                Save settings
+              </button>
+            </div>
           </form>
+        </div>
+
+        <h2>Blocked phrases ({banned.bannedPhrases.length})</h2>
+        <p className="dim" style={{ fontSize: 12, margin: "0 0 8px" }}>
+          If generated copy contains one of these, it is blocked from
+          publishing. &quot;a | b&quot; means any of those words matches.
+          Engine-wide hype and AI-cliché rules are always active on top.
+        </p>
+        <div className="card">
+          {banned.bannedPhrases.map((p) => {
+            const r = readablePattern(p);
+            return (
+              <div
+                key={p}
+                className="row"
+                style={{ padding: "5px 0", borderBottom: "1px solid var(--line)" }}
+              >
+                <span style={{ flex: 1 }}>
+                  “{r.text.replace(/\|/g, " | ")}”
+                  {r.isRegex && r.text === p && (
+                    <span className="pill" style={{ marginLeft: 8 }}>pattern</span>
+                  )}
+                </span>
+                <form action={removeBannedPhraseAction} className="inline">
+                  <input type="hidden" name="phrase" value={p} />
+                  <button className="ghost" type="submit">
+                    Remove
+                  </button>
+                </form>
+              </div>
+            );
+          })}
+          <form action={addBannedPhraseAction} style={{ marginTop: 12 }}>
+            <div className="row fields">
+              <div className="field">
+                <label>Block another phrase (plain text, e.g. &quot;money-back guarantee&quot;)</label>
+                <input name="phrase" placeholder="free forever" required />
+              </div>
+              <div style={{ alignSelf: "flex-end" }}>
+                <button className="primary" type="submit">
+                  Add
+                </button>
+              </div>
+            </div>
+          </form>
+          <details style={{ marginTop: 10 }}>
+            <summary className="dim" style={{ fontSize: 12, cursor: "pointer" }}>
+              Advanced: edit all as patterns (one per line)
+            </summary>
+            <form action={bulkBannedPhrasesAction}>
+              <textarea
+                name="bannedPhrases"
+                defaultValue={banned.bannedPhrases.join("\n")}
+                spellCheck={false}
+                style={{ minHeight: 160, fontFamily: "ui-monospace, monospace", fontSize: 12.5 }}
+              />
+              <button type="submit">Save all</button>
+            </form>
+          </details>
         </div>
       </section>
 
@@ -252,11 +316,11 @@ export default async function FilesPage({
           <div key={p.slug} className="card">
             <form action={seoPageAction}>
               <input type="hidden" name="originalSlug" value={p.slug} />
-              <div className="row">
+              <div className="row fields">
                 <Field name="slug" title="Slug (the URL)" def={p.slug} required />
                 <Field name="audience" title="Who it's for" def={p.audience} required />
               </div>
-              <div className="row">
+              <div className="row fields">
                 <Field name="intent" title="Search intent it answers" def={p.intent} required />
                 <Field name="primaryFeature" title="Feature it leans on" def={p.primaryFeature} required />
               </div>
@@ -274,11 +338,11 @@ export default async function FilesPage({
         <div className="card">
           <form action={seoPageAction}>
             <strong style={{ fontSize: 13 }}>Add a page</strong>
-            <div className="row">
+            <div className="row fields">
               <Field name="slug" title="Slug" def="" placeholder="notes-from-screenshots" required />
               <Field name="audience" title="Who it's for" def="" placeholder="support teams" required />
             </div>
-            <div className="row">
+            <div className="row fields">
               <Field name="intent" title="Search intent" def="" placeholder="turn screenshots into searchable notes" required />
               <Field name="primaryFeature" title="Feature it leans on" def="" placeholder="on-device OCR" required />
             </div>
@@ -303,7 +367,7 @@ export default async function FilesPage({
           <div key={c.slug} className="card">
             <form action={comparisonAction}>
               <input type="hidden" name="originalSlug" value={c.slug} />
-              <div className="row">
+              <div className="row fields">
                 <Field name="slug" title="Slug" def={c.slug} required />
                 <Field name="category" title="Category compared against" def={c.category} required />
               </div>
@@ -322,7 +386,7 @@ export default async function FilesPage({
         <div className="card">
           <form action={comparisonAction}>
             <strong style={{ fontSize: 13 }}>Add a comparison</strong>
-            <div className="row">
+            <div className="row fields">
               <Field name="slug" title="Slug" def="" placeholder="vs-meeting-bots" required />
               <Field name="category" title="Category" def="" placeholder="meeting bots" required />
             </div>

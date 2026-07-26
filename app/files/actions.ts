@@ -113,18 +113,13 @@ export async function saveProductConfigAction(formData: FormData) {
 // ---------------------------------------------------------------------------
 // banned-claims.json
 
+const BANNED_PATH = () => resolve(productDir(), "factbase", "banned-claims.json");
+
+/** Prices/domains/emoji/link settings — phrases are managed separately. */
 export async function saveGuardrailsAction(formData: FormData) {
-  const path = resolve(productDir(), "factbase", "banned-claims.json");
+  const path = BANNED_PATH();
   const current = readJson(path);
 
-  const patterns = lines(formData, "bannedPhrases");
-  for (const p of patterns) {
-    try {
-      new RegExp(p, "i");
-    } catch {
-      back("banned-claims", "err", `this line is not a valid pattern: ${p}`);
-    }
-  }
   const maxEmoji = Number(s(formData, "maxEmoji"));
   if (!Number.isInteger(maxEmoji) || maxEmoji < 0)
     back("banned-claims", "err", "max emoji must be 0 or more");
@@ -136,10 +131,59 @@ export async function saveGuardrailsAction(formData: FormData) {
     ...current,
     allowedPriceTokens: list(formData, "allowedPriceTokens"),
     allowedDomains: domains,
-    bannedPhrases: patterns,
     requireSingleCanonicalLink: formData.get("requireSingleCanonicalLink") === "on",
     maxEmoji,
   });
+  await saved("banned-claims", "banned-claims.json");
+}
+
+const REGEX_META = /[\\()[\]|+*?^${}]/;
+
+/** Plain text stays plain (matching is case-insensitive substring); anything
+ *  with regex syntax must compile. */
+function checkPhrase(p: string): string | null {
+  if (!REGEX_META.test(p)) return null;
+  try {
+    new RegExp(p, "i");
+    return null;
+  } catch {
+    return `not a valid pattern: ${p}`;
+  }
+}
+
+export async function addBannedPhraseAction(formData: FormData) {
+  const phrase = s(formData, "phrase").toLowerCase();
+  if (phrase.length < 2) back("banned-claims", "err", "phrase is too short");
+  const problem = checkPhrase(phrase);
+  if (problem) back("banned-claims", "err", problem);
+
+  const path = BANNED_PATH();
+  const current = readJson(path);
+  const phrases = (Array.isArray(current.bannedPhrases) ? current.bannedPhrases : []) as string[];
+  if (phrases.includes(phrase)) back("banned-claims", "err", "already in the list");
+  writeJson(path, { ...current, bannedPhrases: [...phrases, phrase] });
+  await saved("banned-claims", "banned-claims.json");
+}
+
+export async function removeBannedPhraseAction(formData: FormData) {
+  const phrase = String(formData.get("phrase") ?? "");
+  const path = BANNED_PATH();
+  const current = readJson(path);
+  const phrases = (Array.isArray(current.bannedPhrases) ? current.bannedPhrases : []) as string[];
+  writeJson(path, { ...current, bannedPhrases: phrases.filter((p) => p !== phrase) });
+  await saved("banned-claims", "banned-claims.json");
+}
+
+/** Power-user bulk editor (one pattern per line), kept out of the main flow. */
+export async function bulkBannedPhrasesAction(formData: FormData) {
+  const patterns = lines(formData, "bannedPhrases");
+  for (const p of patterns) {
+    const problem = checkPhrase(p);
+    if (problem) back("banned-claims", "err", problem);
+  }
+  const path = BANNED_PATH();
+  const current = readJson(path);
+  writeJson(path, { ...current, bannedPhrases: patterns });
   await saved("banned-claims", "banned-claims.json");
 }
 

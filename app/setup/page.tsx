@@ -174,17 +174,9 @@ function InterviewForm() {
     placeholder?: string;
     required?: boolean;
   }) => (
-    <div style={{ marginBottom: 10 }}>
-      <label className="dim" style={{ fontSize: 12, display: "block" }}>
-        {label}
-      </label>
-      <input
-        name={name}
-        defaultValue={def}
-        placeholder={placeholder}
-        required={required}
-        style={{ width: "100%" }}
-      />
+    <div className="field" style={{ marginBottom: 10 }}>
+      <label>{label}</label>
+      <input name={name} defaultValue={def} placeholder={placeholder} required={required} />
     </div>
   );
 
@@ -210,38 +202,34 @@ function InterviewForm() {
         <F name="websiteBranch" label="Website branch" def="main" />
         <F name="releasesRepo" label="Repo whose GitHub Releases feed the changelog (defaults to the website repo)" placeholder="you/yourapp" />
         <F name="socialTargets" label="Social channels to target (comma-separated: mastodon,bluesky,linkedin,reddit,x)" def={d.socialTargets.join(",")} />
-        <div className="row">
-          <div style={{ flex: 1 }}>
-            <label className="dim" style={{ fontSize: 12, display: "block" }}>
-              Content file format
-            </label>
+        <div className="row fields">
+          <div className="field">
+            <label>Content file format</label>
             <select name="format" defaultValue="markdown">
               <option value="markdown">markdown (frontmatter)</option>
               <option value="json">json</option>
             </select>
           </div>
-          <div style={{ flex: 1 }}>
-            <label className="dim" style={{ fontSize: 12, display: "block" }}>
-              Release tag scheme
-            </label>
+          <div className="field">
+            <label>Release tag scheme</label>
             <select name="tagScheme" defaultValue="semver">
               <option value="semver">semver (patch-collapse)</option>
               <option value="any">any (announce every release)</option>
             </select>
           </div>
         </div>
-        <div className="row" style={{ marginTop: 10 }}>
-          <div style={{ flex: 1 }}>
-            <label className="dim" style={{ fontSize: 12, display: "block" }}>CTA path: releases</label>
-            <input name="ctaRelease" defaultValue="/" style={{ width: "100%" }} />
+        <div className="row fields" style={{ marginTop: 10 }}>
+          <div className="field">
+            <label>CTA path: releases</label>
+            <input name="ctaRelease" defaultValue="/" />
           </div>
-          <div style={{ flex: 1 }}>
-            <label className="dim" style={{ fontSize: 12, display: "block" }}>CTA path: SEO pages</label>
-            <input name="ctaSeo" defaultValue="/" style={{ width: "100%" }} />
+          <div className="field">
+            <label>CTA path: SEO pages</label>
+            <input name="ctaSeo" defaultValue="/" />
           </div>
-          <div style={{ flex: 1 }}>
-            <label className="dim" style={{ fontSize: 12, display: "block" }}>CTA path: comparisons</label>
-            <input name="ctaComparison" defaultValue="/" style={{ width: "100%" }} />
+          <div className="field">
+            <label>CTA path: comparisons</label>
+            <input name="ctaComparison" defaultValue="/" />
           </div>
         </div>
       </div>
@@ -447,20 +435,17 @@ export default async function SetupPage({
             <span className="pill">dashboard port {el.PORT || "3400 (default)"}</span>
           </div>
           <form action={saveEnvAction}>
-            <div className="row">
-              <div style={{ flex: 2 }}>
-                <label className="dim" style={{ fontSize: 12, display: "block" }}>
-                  GitHub token — lets the engine read your releases and commit
-                  content to your website repo (fine-grained PAT; optional until
-                  you go live)
+            <div className="row fields">
+              <div className="field" style={{ flex: 2 }}>
+                <label>
+                  GitHub token — reads your releases, commits content to your
+                  website repo (fine-grained PAT; optional until you go live)
                 </label>
-                <input name="GITHUB_TOKEN" type="password" placeholder="github_pat_…" style={{ width: "100%" }} />
+                <input name="GITHUB_TOKEN" type="password" placeholder="github_pat_…" />
               </div>
-              <div style={{ flex: 1 }}>
-                <label className="dim" style={{ fontSize: 12, display: "block" }}>
-                  Dashboard port (unique per instance)
-                </label>
-                <input name="PORT" placeholder={el.PORT || "3400"} style={{ width: "100%" }} />
+              <div className="field">
+                <label>Dashboard port (unique per instance)</label>
+                <input name="PORT" placeholder={el.PORT || "3400"} />
               </div>
             </div>
             <button type="submit" style={{ marginTop: 8 }}>

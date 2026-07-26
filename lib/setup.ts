@@ -340,10 +340,11 @@ export interface GuardrailDraft {
 }
 
 async function draftGuardrails(repoEv: string, vaultEv: string, a: Answers): Promise<GuardrailDraft> {
-  const system = `You write PRODUCT-SPECIFIC guardrail patterns for a marketing-copy linter. Generic hype/AI-slop patterns already exist; produce only what is specific to THIS product:
-- Regexes (case-insensitive JS regex source strings) that catch claims this product's pricing model forbids (e.g. calling a capped free tier "unlimited" or "free forever").
-- Regexes catching characterizations of the named competitors ("better than X", "X is slow/bad/expensive").
-- Regexes for anything in the operator's never-claim list.
+  const system = `You write PRODUCT-SPECIFIC guardrail patterns for a marketing-copy linter (case-insensitive substring/regex match blocks the copy). Generic hype/AI-slop patterns already exist; produce only what is specific to THIS product:
+- Claims this product's pricing model forbids (e.g. calling a capped free tier "unlimited" or "free forever").
+- Characterizations of the named competitors ("better than X", "X is slow/bad/expensive").
+- Anything in the operator's never-claim list.
+STRONGLY prefer plain lowercase phrases ("free forever", "no credit card") — the operator reads and edits this list, and matching is substring-based so plain text works. Use regex syntax ONLY when alternation genuinely earns its keep, and keep it simple.
 Also produce 1-4 short "criticNotes": product-specific sentences for an LLM reviewer (e.g. "Implying the Free tier is unlimited is a violation (capped at N)").
 Keep patterns precise — they BLOCK copy on match, so an over-broad regex silences legitimate copy. Reply with ONLY compact JSON: {"bannedPhrases": string[], "criticNotes": string[]}.`;
   const j = await draftJson<Partial<GuardrailDraft>>(
