@@ -95,6 +95,33 @@ function git(repo: string, args: string[]): string {
   }
 }
 
+const MANIFESTS = [
+  "package.json",
+  "Cargo.toml",
+  "pyproject.toml",
+  "go.mod",
+  "composer.json",
+  "Package.swift",
+  "Gemfile",
+];
+
+/** Does this directory look like a product source repo (vs. a workspace
+ *  folder holding several)? README, a build manifest, an Xcode project, or
+ *  git history all count. */
+function looksLikeRepo(dir: string): boolean {
+  try {
+    const entries = readdirSync(dir);
+    return (
+      entries.some((f) => /^readme(\.|$)/i.test(f)) ||
+      MANIFESTS.some((m) => entries.includes(m)) ||
+      entries.some((f) => f.endsWith(".xcodeproj")) ||
+      entries.includes(".git")
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Bounded, deterministic sweep of the product repo: README, manifests,
  *  top-level docs, release tags. No LLM here — this just assembles evidence. */
 function gatherRepoEvidence(repo: string): string {
@@ -103,10 +130,15 @@ function gatherRepoEvidence(repo: string): string {
     if (text?.trim()) parts.push(`--- ${label} ---\n${text.trim()}`);
   };
 
-  for (const f of readdirSync(repo)) {
+  // Baseline the model can always orient on, even in a sparse repo.
+  const top = readdirSync(repo).filter((f) => !f.startsWith("."));
+  push("top-level entries", top.slice(0, 60).join("\n"));
+
+  for (const f of top) {
     if (/^readme(\.|$)/i.test(f)) push(f, tryRead(join(repo, f), 16_000));
+    if (f.endsWith(".xcodeproj")) push("xcode project", f);
   }
-  for (const f of ["package.json", "Cargo.toml", "pyproject.toml", "go.mod", "composer.json"]) {
+  for (const f of MANIFESTS) {
     push(f, tryRead(join(repo, f), 2_000));
   }
   const docs = readdirSync(repo).filter(
@@ -536,6 +568,21 @@ async function main() {
   const args = parseArgs();
   if (!existsSync(args.repo) || !statSync(args.repo).isDirectory())
     throw new Error(`--repo is not a directory: ${args.repo}`);
+  // A workspace folder full of repos yields empty evidence, and the drafting
+  // model (correctly) refuses to invent facts from nothing — catch it BEFORE
+  // any paid drafting and point at the likely repos inside.
+  if (!looksLikeRepo(args.repo)) {
+    const candidates = readdirSync(args.repo, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && !e.name.startsWith(".") && e.name !== "node_modules")
+      .filter((e) => looksLikeRepo(join(args.repo, e.name)))
+      .map((e) => e.name);
+    throw new Error(
+      `${args.repo} doesn't look like a product source repo (no README, build manifest, Xcode project, or .git).` +
+        (candidates.length
+          ? ` It does contain repos — did you mean one of: ${candidates.join(", ")}? Point --repo at the product's own source repo.`
+          : ""),
+    );
+  }
   if (args.vault && (!existsSync(args.vault) || !statSync(args.vault).isDirectory()))
     throw new Error(`--vault is not a directory: ${args.vault}`);
   if (existsSync(join(args.out, "product.json")))
