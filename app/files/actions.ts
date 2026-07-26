@@ -1,98 +1,220 @@
 "use server";
 
-// Validated in-dashboard editing for the product files that previously said
-// "open your editor". Every save parses + shape-checks BEFORE writing (an
-// invalid product.json would take down the dashboard; an invalid regex would
-// crash the linter) and is audited.
-import { writeFileSync } from "node:fs";
+// Form-based editing for the product files. Each action reads the current
+// file, applies the form's changes, VALIDATES the result, and only then
+// writes — a bad submission is rejected with the specific problem (an
+// invalid product.json would take the dashboard down; an invalid regex
+// would crash the linter). Every save is audited.
+import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { redirect } from "next/navigation";
 import { productDir, validateProductConfig } from "@/lib/product";
+import { normalizeRepo } from "@/lib/setup";
 import { audit } from "@/lib/audit";
 
-const kebabOk = (s: unknown) => typeof s === "string" && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s);
-const str = (s: unknown) => typeof s === "string" && s.trim().length > 0;
+const s = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
+const list = (fd: FormData, k: string) =>
+  s(fd, k)
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+const lines = (fd: FormData, k: string) =>
+  String(fd.get(k) ?? "")
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean);
 
-type FileKey = "product" | "banned-claims" | "seo-pages" | "comparisons";
+const kebabOk = (x: string) => /^[a-z0-9]+(-[a-z0-9]+)*$/.test(x);
 
-const FILES: Record<FileKey, { path: () => string; check: (j: unknown) => string | null }> = {
-  product: {
-    path: () => resolve(productDir(), "product.json"),
-    check: (j) => {
-      try {
-        validateProductConfig(j);
-        return null;
-      } catch (e) {
-        return (e as Error).message;
-      }
-    },
-  },
-  "banned-claims": {
-    path: () => resolve(productDir(), "factbase", "banned-claims.json"),
-    check: (j) => {
-      const o = j as Record<string, unknown>;
-      for (const k of ["allowedPriceTokens", "allowedDomains", "bannedPhrases"]) {
-        if (!Array.isArray(o[k]) || (o[k] as unknown[]).some((x) => typeof x !== "string"))
-          return `${k} must be an array of strings`;
-      }
-      for (const p of o.bannedPhrases as string[]) {
-        try {
-          new RegExp(p, "i");
-        } catch {
-          return `bannedPhrases contains an invalid regex: ${p}`;
-        }
-      }
-      if (typeof o.requireSingleCanonicalLink !== "boolean")
-        return "requireSingleCanonicalLink must be true or false";
-      if (typeof o.maxEmoji !== "number") return "maxEmoji must be a number";
-      return null;
-    },
-  },
-  "seo-pages": {
-    path: () => resolve(productDir(), "factbase", "seo-pages.json"),
-    check: (j) => {
-      const pages = (j as Record<string, unknown>).pages;
-      if (!Array.isArray(pages)) return "top level must be {\"pages\": [...]}";
-      for (const p of pages as Record<string, unknown>[]) {
-        if (!kebabOk(p?.slug)) return `every page needs a kebab-case slug (bad: ${JSON.stringify(p?.slug)})`;
-        if (!str(p?.audience) || !str(p?.intent) || !str(p?.primaryFeature))
-          return `page "${p?.slug}" needs audience, intent, and primaryFeature`;
-      }
-      return null;
-    },
-  },
-  comparisons: {
-    path: () => resolve(productDir(), "factbase", "comparisons.json"),
-    check: (j) => {
-      const comparisons = (j as Record<string, unknown>).comparisons;
-      if (!Array.isArray(comparisons)) return "top level must be {\"comparisons\": [...]}";
-      for (const c of comparisons as Record<string, unknown>[]) {
-        if (!kebabOk(c?.slug)) return `every comparison needs a kebab-case slug (bad: ${JSON.stringify(c?.slug)})`;
-        if (!str(c?.category) || !str(c?.angle))
-          return `comparison "${c?.slug}" needs category and angle`;
-      }
-      return null;
-    },
-  },
-};
+function back(anchor: string, kind: "msg" | "err", text: string): never {
+  redirect(`/files?${kind}=${encodeURIComponent(text)}#${anchor}`);
+}
 
-export async function saveProductFileAction(formData: FormData) {
-  const key = String(formData.get("file")) as FileKey;
-  const def = FILES[key];
-  const back = (kind: "msg" | "err", text: string): never =>
-    redirect(`/files?${kind}=${encodeURIComponent(text)}#${key}`);
-  if (!def) back("err", `unknown file: ${key}`);
-
-  let parsed: unknown;
+function readJson(path: string): Record<string, unknown> {
   try {
-    parsed = JSON.parse(String(formData.get("text") ?? ""));
-  } catch (e) {
-    back("err", `${key}: not valid JSON — ${(e as Error).message}`);
+    return JSON.parse(readFileSync(path, "utf-8"));
+  } catch {
+    return {};
   }
-  const problem = def.check(parsed);
-  if (problem) back("err", `${key}: ${problem}`);
+}
 
-  writeFileSync(def.path(), JSON.stringify(parsed, null, 2) + "\n");
-  await audit("dashboard", "product_file_updated", { file: key }, { level: "warn" });
-  back("msg", `${key} saved — takes effect on the next tick`);
+function writeJson(path: string, value: unknown) {
+  writeFileSync(path, JSON.stringify(value, null, 2) + "\n");
+}
+
+async function saved(anchor: string, file: string): Promise<never> {
+  await audit("dashboard", "product_file_updated", { file }, { level: "warn" });
+  back(anchor, "msg", `${file} saved — takes effect on the next tick`);
+}
+
+// ---------------------------------------------------------------------------
+// product.json
+
+export async function saveProductConfigAction(formData: FormData) {
+  const path = resolve(productDir(), "product.json");
+  const current = readJson(path);
+
+  let github;
+  try {
+    github = {
+      releasesRepo: normalizeRepo(s(formData, "releasesRepo")) || normalizeRepo(s(formData, "websiteRepo")),
+      websiteRepo: normalizeRepo(s(formData, "websiteRepo")),
+      websiteBranch: s(formData, "websiteBranch") || "main",
+    };
+  } catch (e) {
+    back("product", "err", (e as Error).message);
+  }
+
+  const currentSite = (current.site ?? {}) as Record<string, unknown>;
+  const dirs = (currentSite.contentDirs ?? {}) as Record<string, string>;
+  const paths = (currentSite.urlPaths ?? {}) as Record<string, string>;
+  for (const ch of ["changelog", "blog", "seo", "comparison"]) {
+    const d = s(formData, `dir_${ch}`);
+    const u = s(formData, `url_${ch}`);
+    if (d) dirs[ch] = d;
+    if (u) paths[ch] = u.startsWith("/") ? u : `/${u}`;
+  }
+
+  const next = {
+    ...current, // preserves _comment, reviewed, and anything unknown
+    name: s(formData, "name"),
+    slug: s(formData, "slug") || s(formData, "name").toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    domain: s(formData, "domain"),
+    siteUrl: s(formData, "siteUrl") || `https://${s(formData, "domain")}`,
+    github,
+    cta: {
+      release: s(formData, "ctaRelease") || "/",
+      seo: s(formData, "ctaSeo") || "/",
+      comparison: s(formData, "ctaComparison") || "/",
+    },
+    site: {
+      format: s(formData, "format") === "json" ? "json" : "markdown",
+      contentDirs: dirs,
+      urlPaths: paths,
+    },
+    releases: {
+      tagScheme: s(formData, "tagScheme") === "any" ? "any" : "semver",
+      socialMaxAgeDays: Number(s(formData, "socialMaxAgeDays")) || 14,
+      rollupPatchCount: Number(s(formData, "rollupPatchCount")) || 3,
+    },
+    socialTargets: formData.getAll("socialTargets").map(String),
+    criticNotes: lines(formData, "criticNotes"),
+  };
+
+  try {
+    validateProductConfig(next);
+  } catch (e) {
+    back("product", "err", (e as Error).message);
+  }
+  writeJson(path, next);
+  await saved("product", "product.json");
+}
+
+// ---------------------------------------------------------------------------
+// banned-claims.json
+
+export async function saveGuardrailsAction(formData: FormData) {
+  const path = resolve(productDir(), "factbase", "banned-claims.json");
+  const current = readJson(path);
+
+  const patterns = lines(formData, "bannedPhrases");
+  for (const p of patterns) {
+    try {
+      new RegExp(p, "i");
+    } catch {
+      back("banned-claims", "err", `this line is not a valid pattern: ${p}`);
+    }
+  }
+  const maxEmoji = Number(s(formData, "maxEmoji"));
+  if (!Number.isInteger(maxEmoji) || maxEmoji < 0)
+    back("banned-claims", "err", "max emoji must be 0 or more");
+  const domains = list(formData, "allowedDomains");
+  if (domains.length === 0)
+    back("banned-claims", "err", "at least one allowed domain is required (links must live somewhere)");
+
+  writeJson(path, {
+    ...current,
+    allowedPriceTokens: list(formData, "allowedPriceTokens"),
+    allowedDomains: domains,
+    bannedPhrases: patterns,
+    requireSingleCanonicalLink: formData.get("requireSingleCanonicalLink") === "on",
+    maxEmoji,
+  });
+  await saved("banned-claims", "banned-claims.json");
+}
+
+// ---------------------------------------------------------------------------
+// seo-pages.json + comparisons.json (list editing: upsert / remove)
+
+interface SeoPage {
+  slug: string;
+  audience: string;
+  intent: string;
+  primaryFeature: string;
+}
+
+export async function seoPageAction(formData: FormData) {
+  const path = resolve(productDir(), "factbase", "seo-pages.json");
+  const current = readJson(path);
+  const pages = (Array.isArray(current.pages) ? current.pages : []) as SeoPage[];
+  const original = s(formData, "originalSlug");
+  const op = s(formData, "op");
+
+  if (op === "remove") {
+    writeJson(path, { ...current, pages: pages.filter((p) => p.slug !== original) });
+    await saved("seo-pages", "seo-pages.json");
+  }
+
+  const page: SeoPage = {
+    slug: s(formData, "slug"),
+    audience: s(formData, "audience"),
+    intent: s(formData, "intent"),
+    primaryFeature: s(formData, "primaryFeature"),
+  };
+  if (!kebabOk(page.slug)) back("seo-pages", "err", "slug must be kebab-case (letters, digits, hyphens)");
+  if (!page.audience || !page.intent || !page.primaryFeature)
+    back("seo-pages", "err", "audience, intent, and feature are all required");
+  if (page.slug !== original && pages.some((p) => p.slug === page.slug))
+    back("seo-pages", "err", `a page with slug "${page.slug}" already exists`);
+
+  const idx = pages.findIndex((p) => p.slug === original);
+  if (idx >= 0) pages[idx] = page;
+  else pages.push(page);
+  writeJson(path, { ...current, pages });
+  await saved("seo-pages", "seo-pages.json");
+}
+
+interface Comparison {
+  slug: string;
+  category: string;
+  angle: string;
+}
+
+export async function comparisonAction(formData: FormData) {
+  const path = resolve(productDir(), "factbase", "comparisons.json");
+  const current = readJson(path);
+  const comparisons = (Array.isArray(current.comparisons) ? current.comparisons : []) as Comparison[];
+  const original = s(formData, "originalSlug");
+  const op = s(formData, "op");
+
+  if (op === "remove") {
+    writeJson(path, { ...current, comparisons: comparisons.filter((c) => c.slug !== original) });
+    await saved("comparisons", "comparisons.json");
+  }
+
+  const item: Comparison = {
+    slug: s(formData, "slug"),
+    category: s(formData, "category"),
+    angle: s(formData, "angle"),
+  };
+  if (!kebabOk(item.slug)) back("comparisons", "err", "slug must be kebab-case (letters, digits, hyphens)");
+  if (!item.category || !item.angle) back("comparisons", "err", "category and angle are both required");
+  if (item.slug !== original && comparisons.some((c) => c.slug === item.slug))
+    back("comparisons", "err", `a comparison with slug "${item.slug}" already exists`);
+
+  const idx = comparisons.findIndex((c) => c.slug === original);
+  if (idx >= 0) comparisons[idx] = item;
+  else comparisons.push(item);
+  writeJson(path, { ...current, comparisons });
+  await saved("comparisons", "comparisons.json");
 }
