@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { isConfigured } from "@/lib/product";
 import { loadEvergreen } from "@/lib/sources/factbase";
 import { rotationIndex } from "@/lib/dedupe";
 import { getCadenceSettings } from "@/lib/settings";
@@ -37,6 +39,7 @@ export default async function AnglesPage({
 }: {
   searchParams: Promise<{ msg?: string; err?: string }>;
 }) {
+  if (!isConfigured()) redirect("/setup");
   const { msg, err } = await searchParams;
   const angles = loadEvergreen();
   const cadence = await getCadenceSettings();

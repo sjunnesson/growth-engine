@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { isConfigured } from "@/lib/product";
 import { awaitingApproval, recentItems } from "@/lib/queue";
 import { approveAction, rejectAction, retryAction } from "@/app/actions";
 
@@ -16,6 +18,7 @@ function statusPill(s: string) {
 }
 
 export default async function QueuePage() {
+  if (!isConfigured()) redirect("/setup");
   let ready: Awaited<ReturnType<typeof awaitingApproval>> = [];
   let recent: Awaited<ReturnType<typeof recentItems>> = [];
   let dbError = "";

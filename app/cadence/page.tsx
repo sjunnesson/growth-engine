@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { isConfigured } from "@/lib/product";
 import {
   channelCadence,
   publishHistogram,
@@ -227,6 +229,7 @@ export default async function CadencePage({
 }: {
   searchParams: Promise<{ msg?: string; err?: string }>;
 }) {
+  if (!isConfigured()) redirect("/setup");
   const { msg, err } = await searchParams;
   let cadence: ChannelCadence[] = [];
   let histogram = new Map<string, number>();

@@ -5,7 +5,7 @@
 //   product/factbase/*    — the closed world (facts.md + guardrail data)
 // The engine code itself must stay product-agnostic: any new product-specific
 // string belongs here or in the factbase, never in lib/.
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 export interface ProductConfig {
@@ -127,6 +127,22 @@ function withEnvOverrides(cfg: ProductConfig): ProductConfig {
 }
 
 let _cache: { mtimeMs: number; cfg: ProductConfig } | null = null;
+
+/** Is a product configured in this checkout yet? False on a fresh clone —
+ *  the dashboard steers to /setup and the tick idles instead of crashing. */
+export function isConfigured(): boolean {
+  return existsSync(file());
+}
+
+/** product(), or null when this checkout has no product yet (fresh clone).
+ *  UI code uses this; pipeline code keeps the throwing product(). */
+export function productOrNull(): ProductConfig | null {
+  try {
+    return product();
+  } catch {
+    return null;
+  }
+}
 
 /** The product config, reloaded when product.json changes on disk (the runner
  *  is a long-lived process; a stale-forever cache would hide edits). */

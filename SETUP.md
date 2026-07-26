@@ -7,20 +7,21 @@ gate in dry-run, then flip channels live one at a time.
 
 ## 0. Onboarding a product (new instances)
 
-One checkout = one product. For a new product, make a fresh checkout, then:
+One checkout = one product. The guided path (macOS): build + open the menu
+bar app and follow its "Set up growth engine…" flow — see README
+"Quickstart". Headless/CLI path:
 
 ```bash
-npm install
 npm run setup -- --repo <product-repo-path> [--vault <obsidian-vault-path>]
 ```
 
-The wizard analyzes the repo + vault via the `claude` CLI, interviews you for
-pricing tokens / domains / repos / channels, and drafts `product/`
-(product.json + the whole factbase). It writes `reviewed: false`, which
-forces every channel to dry-run until you review the drafts and sign off on
-the dashboard Overview. Resolve every `TODO(verify)` in
-`product/factbase/facts.md` before signing off — the closed-world guarantee
-is that review.
+Either way the wizard analyzes the repo + vault via the `claude` CLI,
+interviews you for pricing tokens / domains / repos / channels, and drafts
+`product/` (product.json + the whole factbase). It writes `reviewed: false`,
+which forces every channel to dry-run until you review the drafts and sign
+off (the dashboard `/setup` page walks the review: env, migrate, dry-run,
+sign-off). Resolve every `TODO(verify)` in `product/factbase/facts.md`
+before signing off — the closed-world guarantee is that review.
 
 Give each instance its own `DATABASE_URL` (dedupe keys, rate buckets, and
 kill switches are global within a database) and its own `PORT`.

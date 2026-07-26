@@ -10,8 +10,15 @@ import { generate } from "@/lib/claude/generate";
 import { lint } from "@/lib/guardrails/lint";
 import { loadEvergreen } from "@/lib/sources/factbase";
 import { utmUrl } from "@/lib/social/utm";
+import { isConfigured } from "@/lib/product";
 
 (async () => {
+  if (!isConfigured()) {
+    console.error(
+      "[probe] no product configured — onboard one first (dashboard /setup, or npm run setup).",
+    );
+    process.exit(1);
+  }
   const angle = loadEvergreen()[0];
   const dedupeKey = `probe:${angle.id}:mastodon`;
   const url = utmUrl(

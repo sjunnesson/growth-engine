@@ -1,8 +1,11 @@
+import { redirect } from "next/navigation";
+import { isConfigured } from "@/lib/product";
 import { recentAudit } from "@/lib/queue";
 
 export const dynamic = "force-dynamic";
 
 export default async function AuditPage() {
+  if (!isConfigured()) redirect("/setup");
   let rows: Awaited<ReturnType<typeof recentAudit>> = [];
   let dbError = "";
   try {

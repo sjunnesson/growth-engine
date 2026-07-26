@@ -18,6 +18,26 @@ The engine lives **outside** the product on purpose: it may only touch the
 GitHub API, the `claude` CLI, social platform APIs, and its own Postgres —
 never the product's code or telemetry posture.
 
+## Quickstart (guided)
+
+```bash
+git clone https://github.com/sjunnesson/growth-engine.git myapp-growth
+cd myapp-growth
+./deploy/build-menubar.sh          # requires Xcode Command Line Tools
+open "deploy/build/Growth Engine.app"
+```
+
+The menu bar item knows nothing is configured and offers one action: **"Set
+up growth engine…"** — it starts the dashboard (first launch installs
+dependencies and builds it; give it a minute) and opens the guided Setup
+page: prerequisite checks → point at your repo and notes → interview →
+live drafting progress → a review checklist (env, database, dry-run) → your
+sign-off. Add the app to Login Items; after onboarding, re-run
+`./deploy/build-menubar.sh` to rename it for your product.
+
+Not on macOS (or no menu bar wanted)? `npm run dev` and open
+`http://127.0.0.1:3400/setup` — the same guided flow.
+
 ## Install with an AI agent (copy-paste prompt)
 
 Launch an agentic coding assistant with shell access (e.g. Claude Code) in
@@ -82,16 +102,20 @@ STEPS
 9. Hand off with a short report: what you set up, where, and my remaining
    HUMAN-ONLY checklist — (a) review product/factbase/facts.md (fix every
    TODO(verify), delete anything not literally true), banned-claims.json,
-   and product.json; (b) npm run dev → dashboard Overview → "I reviewed the
-   fact base"; (c) go live gradually via LIVE_CHANNELS per SETUP.md.
+   and product.json; (b) npm run dev → the dashboard /setup page walks the
+   rest (env, migrate, dry-run, sign-off); (c) go live gradually via
+   LIVE_CHANNELS per SETUP.md.
 ```
 
-## Onboarding a new product (manual)
+## Onboarding a new product (CLI)
 
 ```bash
 # a fresh checkout per product, then:
 npm run setup -- --repo ~/code/yourapp --vault ~/Obsidian/YourVault
 ```
+
+Same engine as the guided flow (`/setup` in the dashboard is the friendlier
+front-end); `--answers file.json` makes it non-interactive for agents.
 
 The wizard analyzes the repo (README, manifests, docs, release tags) and the
 Obsidian vault (a triage pass picks the relevant notes) with the Claude CLI,

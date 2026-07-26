@@ -43,6 +43,14 @@ input[type="number"] {
   background: #1c1c1c; color: var(--ink);
   border: 1px solid var(--line); border-radius: 8px; font: inherit;
 }
+input[type="text"], input[type="url"], input[type="password"], input:not([type]), select {
+  padding: 6px 9px; background: #1c1c1c; color: var(--ink);
+  border: 1px solid var(--line); border-radius: 8px; font: inherit;
+}
+pre {
+  background: #1c1c1c; border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px; overflow-x: auto;
+}
 textarea {
   width: 100%; min-height: 120px; margin: 10px 0; padding: 10px;
   background: #1c1c1c; color: var(--ink); border: 1px solid var(--line);

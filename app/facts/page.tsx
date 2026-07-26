@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { isConfigured } from "@/lib/product";
 import { readFactsRaw } from "@/lib/factsheet";
 import { saveFactsAction } from "@/app/actions";
 
@@ -8,6 +10,7 @@ export default async function FactsPage({
 }: {
   searchParams: Promise<{ msg?: string; err?: string }>;
 }) {
+  if (!isConfigured()) redirect("/setup");
   const { msg, err } = await searchParams;
   const { text, version } = readFactsRaw();
 

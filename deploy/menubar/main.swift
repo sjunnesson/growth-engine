@@ -10,6 +10,13 @@ let statusPath = repoPath + "/.status.json"
 let logPath = repoPath + "/.runner.log"
 let dashboardScript = repoPath + "/deploy/open-dashboard.sh"
 let tickScript = "__TICK_SCRIPT__"
+let productConfigPath = repoPath + "/product/product.json"
+
+/// Fresh checkout: no product onboarded yet. The app's job is then to lead
+/// the user into the dashboard's guided Setup page, not to run ticks.
+func isConfigured() -> Bool {
+  FileManager.default.fileExists(atPath: productConfigPath)
+}
 let tickIntervalSeconds: TimeInterval = 1800
 // After a failed/blocked attempt, wait this long before trying again.
 let tickRetrySeconds: TimeInterval = 300
@@ -71,6 +78,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
   /// Runs a tick when the last recorded one is older than the interval.
   /// Also the sleep/wake catch-up: staleness triggers one run after wake.
   func maybeScheduleTick() {
+    guard isConfigured() else { return }
     guard tickProcess == nil else { return }
     guard -lastTickAttempt.timeIntervalSinceNow >= tickRetrySeconds else { return }
     let lastTick = readStatus().flatMap { isoFmt.date(from: $0.ts) } ?? .distantPast
@@ -116,17 +124,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func refresh() {
+    let configured = isConfigured()
     let status = readStatus()
     let tickDate = status.flatMap { isoFmt.date(from: $0.ts) }
     let running = tickProcess != nil
-    let stalled = !running
+    let stalled = configured && !running
       && (tickDate.map { -$0.timeIntervalSinceNow > tickIntervalSeconds * 2 + 120 } ?? true)
-    let failed = status.map { !$0.ok } ?? false
+    let failed = configured && (status.map { !$0.ok } ?? false)
     let ready = status?.ready ?? 0
 
     if let b = item.button {
       if failed || stalled {
         b.title = " ⚠︎"
+      } else if !configured {
+        b.title = " …"
       } else if ready > 0 {
         b.title = " \(ready)"
       } else {
@@ -141,6 +152,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
       let mi = NSMenuItem(title: text, action: nil, keyEquivalent: "")
       mi.isEnabled = false
       menu.addItem(mi)
+    }
+
+    // First run: steer straight into the guided setup and offer nothing else
+    // that assumes a configured product.
+    if !configured {
+      info("No product configured yet")
+      info("Set up takes ~10 minutes; nothing publishes without your sign-off")
+      menu.addItem(.separator())
+      let setup = NSMenuItem(
+        title: "Set up growth engine…",
+        action: #selector(openSetup), keyEquivalent: "")
+      setup.target = self
+      menu.addItem(setup)
+      menu.addItem(.separator())
+      let quit = NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+      menu.addItem(quit)
+      item.menu = menu
+      return
     }
 
     if running { info("Tick running now…") }
@@ -204,9 +233,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   @objc func openDashboard() {
+    openDashboardPath("/queue")
+  }
+
+  @objc func openSetup() {
+    openDashboardPath("/setup")
+  }
+
+  func openDashboardPath(_ path: String) {
     let p = Process()
     p.executableURL = URL(fileURLWithPath: "/bin/bash")
-    p.arguments = [dashboardScript]
+    p.arguments = [dashboardScript, path]
     try? p.run()
   }
 

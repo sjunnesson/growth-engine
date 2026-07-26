@@ -15,7 +15,7 @@
 import { execFile } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { env } from "@/lib/env";
-import { product } from "@/lib/product";
+import { isConfigured, product } from "@/lib/product";
 import { abortIfKilled, blockedBy, scopeFor } from "@/lib/killswitch";
 import {
   enqueueReleases,
@@ -43,6 +43,13 @@ const MAX_ATTEMPTS = 5; // unhandled-error retries before a row fails for good
 const STUCK_AFTER_MINUTES = 60;
 
 async function main() {
+  // Fresh checkout: no product yet. Idle politely (status for the menu bar
+  // app) instead of crash-looping every tick until setup is done.
+  if (!isConfigured()) {
+    console.log("[run] no product configured — open the dashboard Setup page.");
+    writeStatus({ ok: true, configured: false, tally: {}, ready: 0, queue: {} });
+    return;
+  }
   if (!process.env.DATABASE_URL) {
     console.error(
       "[run] DATABASE_URL not set. Start a local Postgres and set it in\n" +

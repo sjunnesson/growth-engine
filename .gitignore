@@ -12,7 +12,10 @@ next-env.d.ts
 .runner.log
 .dashboard.log
 .status.json
-.setup-analysis/
+.setup-status.json
+.setup-answers.json
+.setup.log
+.dryrun.log
 deploy/build/
 
 # Instance data — never committed to this (public) engine repo.

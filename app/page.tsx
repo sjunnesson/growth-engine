@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { env } from "@/lib/env";
 import { loadFacts } from "@/lib/sources/factbase";
-import { product } from "@/lib/product";
+import { isConfigured, product } from "@/lib/product";
 import { listKill } from "@/lib/killswitch";
 import { statusCounts, awaitingApproval } from "@/lib/queue";
 import { toggleKillAction, markReviewedAction } from "@/app/actions";
@@ -24,6 +25,7 @@ function DbHint({ error }: { error: string }) {
 }
 
 export default async function Overview() {
+  if (!isConfigured()) redirect("/setup");
   const cfg = product();
   const posture = {
     growthHalt: env.growthHalt,

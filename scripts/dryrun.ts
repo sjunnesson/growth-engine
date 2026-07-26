@@ -12,7 +12,14 @@
  */
 import { lint } from "@/lib/guardrails/lint";
 import { loadBanned } from "@/lib/sources/factbase";
-import { product } from "@/lib/product";
+import { isConfigured, product } from "@/lib/product";
+
+if (!isConfigured()) {
+  console.error(
+    "[dryrun] no product configured — onboard one first (dashboard /setup, or npm run setup).",
+  );
+  process.exit(1);
+}
 
 /** A price token the product does NOT allow, in the product's own currency
  *  symbol — proves the allowlist actually gates. */

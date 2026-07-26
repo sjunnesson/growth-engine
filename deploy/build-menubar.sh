@@ -8,10 +8,18 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$REPO/deploy/build"
 
+# Works on a fresh clone too: with no product yet the app builds under a
+# generic name and its menu leads into the dashboard's guided Setup page.
+# Re-run after onboarding to rename it for your product.
 PRODUCT_JSON="${PRODUCT_DIR:-$REPO/product}/product.json"
-PRODUCT_NAME="$(node -p "JSON.parse(require('fs').readFileSync('$PRODUCT_JSON','utf8')).name")"
-PRODUCT_SLUG="$(node -p "JSON.parse(require('fs').readFileSync('$PRODUCT_JSON','utf8')).slug")"
-APP_NAME="${GROWTH_APP_NAME:-$PRODUCT_NAME Marketing Engine}"
+if [ -f "$PRODUCT_JSON" ]; then
+  PRODUCT_NAME="$(node -p "JSON.parse(require('fs').readFileSync('$PRODUCT_JSON','utf8')).name")"
+  PRODUCT_SLUG="$(node -p "JSON.parse(require('fs').readFileSync('$PRODUCT_JSON','utf8')).slug")"
+  APP_NAME="${GROWTH_APP_NAME:-$PRODUCT_NAME Marketing Engine}"
+else
+  PRODUCT_SLUG="growth"
+  APP_NAME="${GROWTH_APP_NAME:-Growth Engine}"
+fi
 BUNDLE_ID="growth.$PRODUCT_SLUG.menubar"
 # Menu bar glyph: first letter of the slug in a circle (SF Symbols has a.circle…z.circle).
 SYMBOL="${GROWTH_MENUBAR_SYMBOL:-$(printf %.1s "$PRODUCT_SLUG").circle}"
