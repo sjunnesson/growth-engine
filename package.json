@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start -H 127.0.0.1 -p ${PORT:-3400}",
     "dashboard": "next start -H 127.0.0.1 -p ${PORT:-3400}",
-    "setup": "node --env-file-if-exists=.env.local --import tsx scripts/setup.ts",
+    "setup": "node scripts/setup-bootstrap.mjs",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "db:migrate": "node --env-file-if-exists=.env.local --import tsx lib/db/migrate.ts",
