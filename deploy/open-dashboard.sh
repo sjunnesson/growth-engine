@@ -20,11 +20,20 @@ export PORT
 if ! curl -sf -o /dev/null "http://127.0.0.1:$PORT"; then
   # Fresh clone: the menu bar app may be the very first thing that runs.
   [ -d node_modules ] || npm install >> .dashboard.log 2>&1
-  [ -d .next ] || npm run build >> .dashboard.log 2>&1
+  # .next alone is not enough — a dev server leaves one without a production
+  # BUILD_ID, and `next start` refuses it.
+  [ -f .next/BUILD_ID ] || npm run build >> .dashboard.log 2>&1
   nohup npm run dashboard >> .dashboard.log 2>&1 &
   for _ in $(seq 1 60); do
     curl -sf -o /dev/null "http://127.0.0.1:$PORT" && break
     sleep 0.5
   done
+fi
+
+# Never open a dead page: if the server didn't come up, fail loudly so the
+# caller (menu bar app) can surface the error + log instead.
+if ! curl -sf -o /dev/null "http://127.0.0.1:$PORT"; then
+  echo "[open-dashboard] server did not come up on :$PORT — see above" >> .dashboard.log
+  exit 1
 fi
 open "http://127.0.0.1:$PORT$DASH_PATH"

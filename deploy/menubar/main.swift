@@ -142,7 +142,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     if !fm.fileExists(atPath: repoPath + "/node_modules") {
       ok = shell("npm install", phase: "Installing dependencies (first run, ~1 min)…")
     }
-    if ok && !fm.fileExists(atPath: repoPath + "/.next") {
+    // BUILD_ID, not just .next: a dev server leaves a .next that
+    // `next start` refuses.
+    if ok && !fm.fileExists(atPath: repoPath + "/.next/BUILD_ID") {
       ok = shell("npm run build", phase: "Building the dashboard…")
     }
     if ok {
